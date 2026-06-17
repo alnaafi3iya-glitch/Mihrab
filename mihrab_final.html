@@ -1118,11 +1118,11 @@
             const hasMutqan = !S.isBeginnerMode || !!rows.beginnerTransferStarted;
             const hasMutafalit = !S.isBeginnerMode || !!rows.beginnerTransferStarted;
             const isEarlyBeginner = S.isBeginnerMode && !rows.beginnerTransferStarted;            
-            const headHTML = `<tr><th class="p-3 text-slate-800 font-extrabold text-center border-l border-slate-300" style="width:110px;min-width:110px;">اليوم والتاريخ</th>
-            ${hasMutqan ? `<th class="p-3 text-emerald-800 font-extrabold text-center border-l border-slate-300 w-1/5">المتقن 📘</th>` : ''}
-            ${hasMutafalit ? `<th class="p-3 text-teal-800 font-extrabold text-center border-l border-slate-300 w-1/4">المتفلت 📗</th>` : ''}
-            ${S.hasNew && isEarlyBeginner ? `<th class="p-3 text-amber-800 font-extrabold text-center border-l border-slate-300">الحفظ الجديد 📒</th>` : ''}
-            ${S.hasNew && !isEarlyBeginner ? `<th class="p-3 text-amber-800 font-extrabold text-center border-l border-slate-300 w-1/5">الحفظ الجديد 📒</th><th class="p-3 text-indigo-800 font-extrabold text-center border-l border-slate-300 w-1/5">مراجعة الجديد 🔄</th>` : ''}</tr>`;
+            const headHTML = `<tr><th class="p-1 text-slate-800 font-extrabold text-center border-l border-slate-300" style="width:90px;min-width:90px;">اليوم والتاريخ</th>
+            ${hasMutqan ? `<th class="p-1 text-emerald-800 font-extrabold text-center border-l border-slate-300 w-1/5">المتقن 📘</th>` : ''}
+            ${hasMutafalit ? `<th class="p-1 text-teal-800 font-extrabold text-center border-l border-slate-300 w-1/4">المتفلت 📗</th>` : ''}
+            ${S.hasNew && isEarlyBeginner ? `<th class="p-1 text-amber-800 font-extrabold text-center border-l border-slate-300">الحفظ الجديد 📒</th>` : ''}
+            ${S.hasNew && !isEarlyBeginner ? `<th class="p-1 text-amber-800 font-extrabold text-center border-l border-slate-300 w-1/5">الحفظ الجديد 📒</th><th class="p-1 text-indigo-800 font-extrabold text-center border-l border-slate-300 w-1/5">مراجعة الجديد 🔄</th>` : ''}</tr>`;
             table.innerHTML = `<thead class="bg-slate-100 text-slate-700 font-bold border-b-2 border-slate-300">${headHTML}</thead>`;
             
             const tbody = document.createElement("tbody");
@@ -1138,21 +1138,21 @@
                 if (r.isBuffer) {
                     // إرجاع لون التاريخ ليوم الاستدراك إلى الرمادي
                     const newColCount = S.hasNew ? (isEarlyBeginner ? 1 : 2) : 0;
-                    tr.innerHTML = `<td class="p-4 border-l border-amber-200 bg-amber-100/40 font-bold text-amber-800"><div>${r.dayName}</div><div class="text-[10px] text-slate-400 mt-0.5">${r.dateStr}</div></td><td colspan="${(hasMutqan?1:0)+(hasMutafalit?1:0)+newColCount}" class="p-4 text-amber-700 font-bold text-center">🌟 يوم الاستدراك والراحة (مراجعة حرة لما فاتك)</td>`;
+                    tr.innerHTML = `<td class="p-2 border-l border-amber-200 bg-amber-100/40 font-bold text-amber-800"><div>${r.dayName}</div><div class="text-[10px] text-slate-400 mt-0.5">${r.dateStr}</div></td><td colspan="${(hasMutqan?1:0)+(hasMutafalit?1:0)+newColCount}" class="p-2 text-amber-700 font-bold text-center">🌟 يوم الاستدراك والراحة (مراجعة حرة لما فاتك)</td>`;
                 } else {
                     const dayBg = isRowToday ? "bg-emerald-100/50" : "bg-slate-50";
                     
                     // إرجاع ألوان الأيام والتاريخ إلى الرمادي (text-slate-800 و text-slate-400)
-                    let h = `<td class="p-4 border-l border-slate-200 ${dayBg} font-bold text-emerald-800"><div>${r.dayName}</div><div class="text-[10px] text-slate-400 mt-0.5" style="display:flex;align-items:center;gap:4px;">${r.dateStr}${isRowToday ? `<span onclick="completeToday()" style="font-size:9px;background:#1D9E75;color:white;border-radius:6px;padding:2px 6px;cursor:pointer;">✓ إنهاء</span>` : ""}</div></td>`;
+                    let h = `<td class="p-2 border-l border-slate-200 ${dayBg} font-bold text-emerald-800"><div>${r.dayName}</div><div class="text-[10px] text-slate-400 mt-0.5" style="display:flex;align-items:center;gap:4px;">${r.dateStr}${isRowToday ? `<span onclick="completeToday()" style="font-size:9px;background:#1D9E75;color:white;border-radius:6px;padding:2px 6px;cursor:pointer;">✓ إنهاء</span>` : ""}</div></td>`;
                     
-                    if (hasMutqan) h += `<td class="p-4 border-l border-slate-200"><div class="font-bold text-slate-800 leading-normal">${r.mutqan}</div>${r.mutqan!=="—"?`<button onclick="toggleTrack(${r.day}, 'mutqan')" class="mt-2 text-base">${getTrackEmoji(r.day, 'mutqan')}</button>`:""}</td>`;
-                    if (hasMutafalit) h += `<td class="p-4 border-l border-slate-200"><div class="font-bold text-teal-900 leading-normal">${r.mutfalet}</div>${r.mfFinishedNote ? `<div class="text-[9px] text-emerald-700 font-bold mt-1">${r.mfFinishedNote}</div>` : ""}${r.mutfalet!=="—"?`<button onclick="toggleTrack(${r.day}, 'mutfalet')" class="mt-2 text-base">${getTrackEmoji(r.day, 'mutfalet')}</button>`:""}</td>`;
+                    if (hasMutqan) h += `<td class="p-2 border-l border-slate-200"><div class="font-bold text-slate-800 leading-normal">${r.mutqan}</div>${r.mutqan!=="—"?`<button onclick="toggleTrack(${r.day}, 'mutqan')" class="mt-2 text-base">${getTrackEmoji(r.day, 'mutqan')}</button>`:""}</td>`;
+                    if (hasMutafalit) h += `<td class="p-2 border-l border-slate-200"><div class="font-bold text-teal-900 leading-normal">${r.mutfalet}</div>${r.mfFinishedNote ? `<div class="text-[9px] text-emerald-700 font-bold mt-1">${r.mfFinishedNote}</div>` : ""}${r.mutfalet!=="—"?`<button onclick="toggleTrack(${r.day}, 'mutfalet')" class="mt-2 text-base">${getTrackEmoji(r.day, 'mutfalet')}</button>`:""}</td>`;
                     if (S.hasNew) {
                     if (isEarlyBeginner) {
-                        h += `<td class="p-4 border-l border-slate-200 text-center align-top"><div class="font-bold text-amber-900 leading-normal">${r.newMem}</div>${r.newMem !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newMem')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newMem')}</button>` : ""}</td>`;
+                        h += `<td class="p-2 border-l border-slate-200 text-center align-top"><div class="font-bold text-amber-900 leading-normal">${r.newMem}</div>${r.newMem !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newMem')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newMem')}</button>` : ""}</td>`;
                     } else {
-                        h += `<td class="p-4 border-l border-slate-200 text-center align-top"><div class="font-bold text-amber-900 leading-normal">${r.newMem}</div>${r.newMem !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newMem')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newMem')}</button>` : ""}</td>
-                            <td class="p-4 text-center align-top"><div class="font-bold text-indigo-900 text-[11px] leading-relaxed whitespace-pre-line">${r.newReview}</div>${r.newReview !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newReview')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newReview')}</button>` : ""}</td>`;
+                        h += `<td class="p-2 border-l border-slate-200 text-center align-top"><div class="font-bold text-amber-900 leading-normal">${r.newMem}</div>${r.newMem !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newMem')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newMem')}</button>` : ""}</td>
+                            <td class="p-2 text-center align-top"><div class="font-bold text-indigo-900 text-[11px] leading-relaxed whitespace-pre-line">${r.newReview}</div>${r.newReview !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newReview')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newReview')}</button>` : ""}</td>`;
                     }
                 }
                     tr.innerHTML = h;
