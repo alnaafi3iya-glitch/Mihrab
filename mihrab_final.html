@@ -1301,7 +1301,7 @@ ${hasMutafalit ? `<th class="p-1 text-teal-800 font-extrabold text-center border
         }
        
         window.onload = function() {
-            fetch('https://api.counterapi.dev/v1/mihrab-basma-quran-app/app-opens/up').catch(()=>{});
+            counter.up('app-opens').catch(()=>{});
             loadSavedState();
             render();
             if (new URLSearchParams(window.location.search).get('stats') === '1') {
@@ -1310,12 +1310,12 @@ ${hasMutafalit ? `<th class="p-1 text-teal-800 font-extrabold text-center border
                 box.textContent = 'جارٍ التحميل...';
                 document.body.appendChild(box);
                 Promise.all([
-                    fetch('https://api.counterapi.dev/v1/mihrab-basma-quran-app/app-opens').then(r=>r.json()).catch(()=>({count:'؟'})),
-                    fetch('https://api.counterapi.dev/v1/mihrab-basma-quran-app/programs-created').then(r=>r.json()).catch(()=>({count:'؟'}))
+                    counter.get('app-opens').catch(()=>({value:'؟'})),
+                    counter.get('programs-created').catch(()=>({value:'؟'}))
                 ]).then(([opens, programs]) => {
-                    box.innerHTML = `📊 مرات الفتح: ${opens.count}<br>📂 برامج أُنشئت: ${programs.count}`;
+                    box.innerHTML = `📊 مرات الفتح: ${opens.value}<br>📂 برامج أُنشئت: ${programs.value}`;
                 });
-            }
+            }       
         };
        // window.onload = function() { loadSavedState(); render(); };
     
