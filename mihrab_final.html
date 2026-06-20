@@ -1306,14 +1306,19 @@ ${hasMutafalit ? `<th class="p-1 text-teal-800 font-extrabold text-center border
             render();
             if (new URLSearchParams(window.location.search).get('stats') === '1') {
                 const box = document.createElement('div');
-                box.style.cssText = 'position:fixed;top:10px;left:10px;background:#0f172a;color:#fff;padding:10px 16px;border-radius:12px;font-size:12px;z-index:9999;text-align:right;direction:rtl;';
-                box.textContent = 'جارٍ التحميل...';
+                box.style.cssText = 'position:fixed;top:14px;left:14px;z-index:9999;direction:rtl;min-width:190px;';
+                box.className = 'bg-white border border-slate-200 rounded-2xl shadow-lg p-4 text-right';
+                box.innerHTML = `<div class="text-[11px] font-extrabold text-slate-400 mb-2 pb-2 border-b border-slate-100">📊 إحصائيات الاستخدام</div><div class="text-xs text-slate-400">جارٍ التحميل...</div>`;
                 document.body.appendChild(box);
                 Promise.all([
                     counter.get('app-opens').catch(()=>({value:'؟'})),
                     counter.get('programs-created').catch(()=>({value:'؟'}))
                 ]).then(([opens, programs]) => {
-                    box.innerHTML = `📊 مرات الفتح: ${opens.value}<br>📂 برامج أُنشئت: ${programs.value}`;
+                    box.innerHTML = `
+                        <div class="text-[11px] font-extrabold text-slate-400 mb-2 pb-2 border-b border-slate-100">📊 إحصائيات الاستخدام</div>
+                        <div class="flex justify-between items-center mb-1.5"><span class="font-black text-slate-800 text-sm">${opens.value}</span><span class="text-xs text-slate-500">مرات الفتح</span></div>
+                        <div class="flex justify-between items-center"><span class="font-black text-slate-800 text-sm">${programs.value}</span><span class="text-xs text-slate-500">برامج أُنشئت</span></div>
+                    `;
                 });
             }       
         };
