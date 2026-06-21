@@ -2,12 +2,13 @@ const CACHE_NAME = 'mihrab-cache-v1'; // غيّري الرقم (v2, v3...) مع 
 
 const STATIC_ASSETS = [
     './manifest.json',
-    './narjis.ttf',
     'https://alnaafi3iya-glitch.github.io/Mihrab/icon.png'
 ];
 
 const CDN_ASSETS = [
-    'https://cdn.tailwindcss.com'
+    'https://cdn.tailwindcss.com',
+    'https://i.postimg.cc/DJ7jsLg2/mihrab.png',
+    'https://i.postimg.cc/dkJHdrBK/title.png'
 ];
 
 self.addEventListener('install', event => {
