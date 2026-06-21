@@ -56,14 +56,15 @@
 </head>
 <body class="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 antialiased pb-12 flex flex-col items-center justify-start">
 
-    <div class="relative w-full max-w-xl mx-auto">
-        <button onclick="toggleTheme()" class="absolute top-5 right-16 p-2.5 bg-white dark:bg-slate-400 border border-slate-200 dark:border-slate-500 rounded-full shadow-md text-slate-500 dark:text-amber-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition z-[100] text-lg">
-            <span id="theme-icon">🌙</span>
-        </button>
+    <div class="w-full max-w-xl mx-auto">
+        <div class="w-full px-4 pt-3" style="text-align:right;">
+            <button onclick="toggleTheme()" class="inline-flex items-center justify-center w-9 h-9 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-full shadow-sm text-slate-400 dark:text-amber-400 hover:bg-slate-50 dark:hover:bg-slate-600 transition z-[100] text-lg">
+                <span id="theme-icon">🌙</span>
+            </button>
+        </div>
 
-        <div class="w-full px-4 pt-6 flex flex-col items-center justify-center" id="app">
+        <div class="w-full px-4 pt-2 flex flex-col items-center justify-center" id="app">
             </div>
-    </div>
 
     <div id="celebration-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-pop" style="display:none; align-items: center; justify-content: center;">
         <div class="bg-white rounded-2xl max-w-md w-full p-6 text-center shadow-2xl border border-amber-200" style="margin: auto; position: relative;">
