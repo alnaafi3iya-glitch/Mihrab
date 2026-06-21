@@ -1354,7 +1354,15 @@ ${hasMutafalit ? `<th class="p-1 text-teal-800 font-extrabold text-center border
         });
     }
 };
-       // window.onload = function() { loadSavedState(); render(); };
+      // window.onload = function() { loadSavedState(); render(); };
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker مسجّل بنجاح:', reg.scope))
+                    .catch(err => console.log('فشل تسجيل Service Worker:', err));
+            });
+        }
     
 </script>
 </body>
