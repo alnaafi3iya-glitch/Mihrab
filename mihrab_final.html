@@ -620,8 +620,8 @@ async function incrementCounterDirect(counterName) {
                     }
                 }
 
-                if (!S.isBeginnerMode && globalDay === transferDelay && globalDay > 1 && !PROG.messageShown) { setTimeout(() => { document.getElementById('celebration-modal').style.display='flex'; PROG.messageShown = true; saveState(); }, 500); }
-                if (mfUnitIndex === totalBaseMfUnits && totalBaseMfUnits > 0 && globalDay > 1 && !PROG.finishedShown) { setTimeout(() => { document.getElementById('finished-modal').style.display='flex'; PROG.finishedShown = true; saveState(); }, 500); }
+                if (!S.isBeginnerMode && globalDay === transferDelay && globalDay > 1 && TRACKING[getTrackKey(PROG.week, dayIndex, 'mutfalet')] === 'done' && !PROG.messageShown) { setTimeout(() => { document.getElementById('celebration-modal').style.display='flex'; PROG.messageShown = true; saveState(); }, 500); }
+                if (mfUnitIndex === totalBaseMfUnits - 1 && totalBaseMfUnits > 0 && TRACKING[getTrackKey(PROG.week, dayIndex, 'mutfalet')] === 'done' && !PROG.finishedShown) { setTimeout(() => { document.getElementById('finished-modal').style.display='flex'; PROG.finishedShown = true; saveState(); }, 500); }                
                 let ns = newMemStatePerDay[globalDay] || { nMemText: "—", nRevText: "—" };
 
                 rows.push({
