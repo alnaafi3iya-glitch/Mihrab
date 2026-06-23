@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mihrab-cache-v4'; // غيّري الرقم (v2, v3...) مع كل تحديث مستقبلي للتطبيق
+const CACHE_NAME = 'mihrab-cache-v5'; // غيّري الرقم (v2, v3...) مع كل تحديث مستقبلي للتطبيق
 
 const STATIC_ASSETS = [
     './manifest.json',
