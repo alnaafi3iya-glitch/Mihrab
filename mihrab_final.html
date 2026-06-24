@@ -410,7 +410,7 @@ async function incrementCounterDirect(counterName) {
             else if (unitName === "ربع")       page = Math.round(index * 2.516) + 1;
             else if (unitName === "ثمن")       page = Math.round(index * 5.033) + 1;
             else if (unitName === "نصف ثمن")   page = Math.round(index * 2.516) + 1;
-            else if (unitName === "حزب")       page = Math.round(index * 8.053) + 1;
+            else if (unitName === "حزب")       page = (index < HIZB_START_PAGES.length) ? HIZB_START_PAGES[index] : 604;
             else return null;
             page = Math.max(1, Math.min(604, page));
             let surahIndex = 0;
@@ -682,16 +682,18 @@ async function incrementCounterDirect(counterName) {
                     ? (beginnerMutqanSched[i] ? beginnerMutqanSched[i].label : "—")
                     : (baseMutqanSched[i] ? baseMutqanSched[i].label : "—");
                 
-                let mfText = "—", mfFinishedNote = null;
-                if (isActiveMfDay && activeMfUnitIndex < totalBaseMfUnits) mfText = formatDiscreteUnit(startMfIndex + activeMfUnitIndex, S.dailyUnit);
+                let mfDailyText = "—", mfFinishedNote = null, mfDailySurah = null, mfAddedHizb = null, mfAddedSurah = null;
+                if (isActiveMfDay && activeMfUnitIndex < totalBaseMfUnits) {
+                    mfDailyText = formatDiscreteUnit(startMfIndex + activeMfUnitIndex, S.dailyUnit);
+                    if (!S.isBeginnerMode) mfDailySurah = getSurahNameFromIndex(startMfIndex + activeMfUnitIndex, S.dailyUnit);
+                }
                 else if (isActiveMfDay && totalBaseMfUnits > 0 && activeMfUnitIndex === totalBaseMfUnits) mfFinishedNote = "🎉 اكتمل المتفلت الأساسي!";
 
                             if (S.hasNew) {
                                 const activeNewHizb = newHizbMfList.find(h => (globalDay - h.mfStartDay) >= 0 && (globalDay - h.mfStartDay) < activeDays);
                                 if (activeNewHizb) {
-                                    const newHizbSurah = getSurahNameFromIndex(activeNewHizb.hizb - 1, "حزب");
-const addedText = `<span class="text-amber-700 font-bold">الحزب ${activeNewHizb.hizb}</span><br><span class="text-[9px] text-slate-400">${newHizbSurah ? newHizbSurah + ' ✨' : '✨'}</span>`;
-mfText = (mfText !== "—") ? `${mfText} <br><span class="font-bold text-amber-600">+</span> ${addedText}` : `${addedText}`;
+                                    mfAddedHizb = activeNewHizb.hizb;
+                                    mfAddedSurah = getSurahNameFromIndex(activeNewHizb.hizb - 1, "حزب");
                                 }
                             }
 
@@ -699,11 +701,12 @@ mfText = (mfText !== "—") ? `${mfText} <br><span class="font-bold text-amber-6
             if (mfUnitIndex === totalBaseMfUnits - 1 && totalBaseMfUnits > 0 && TRACKING[getTrackKey(PROG.week, dayIndex, 'mutfalet')] === 'done' && !PROG.finishedShown) { setTimeout(() => { document.getElementById('finished-modal').style.display='flex'; PROG.finishedShown = true; saveState(); }, 500); }
                             let ns = newMemStatePerDay[globalDay] || { nMemText: "—", nRevText: "—" };
 
-                            const mfSurahName = (mfText !== "—" && !S.isBeginnerMode) ? getSurahNameFromIndex(startMfIndex + activeMfUnitIndex, S.dailyUnit) : null;
                         rows.push({
                             day: dayIndex, dayName: getDayNameByOffset(i), dateStr: getFormattedDateOffset(i),
-                            mutqan: mutqanText, mutfalet: mfText, mfFinishedNote: mfFinishedNote, mfSurahName: mfSurahName,
-                            newMem: ns.nMemText, newReview: ns.nRevText, isBuffer: false, isMutafalitEmpty: (mfText === "—") 
+                        mfCumulativeText: (totalBaseMfUnits > 0 && activeMfUnitIndex > 0 && activeMfUnitIndex <= totalBaseMfUnits) ? formatDiscreteRange(startMfIndex, startMfIndex + Math.min(activeMfUnitIndex, totalBaseMfUnits) - 1, S.dailyUnit) : null,                        
+                        mutqan: mutqanText, mutfalet: mfDailyText, mfFinishedNote: mfFinishedNote, mfSurahName: mfDailySurah,
+                        mfAddedHizb: mfAddedHizb, mfAddedSurah: mfAddedSurah,
+                            newMem: ns.nMemText, newReview: ns.nRevText, isBuffer: false, isMutafalitEmpty: (mfDailyText === "—" && !mfAddedHizb)
                         });
                         }
                         rows.push({ day: S.mutqanDays, dayName: getDayNameByOffset(S.mutqanDays - 1), dateStr: getFormattedDateOffset(S.mutqanDays - 1), isBuffer: true });
@@ -1298,9 +1301,8 @@ ${hasMutafalit ? `<th class="p-1 text-teal-800 font-extrabold text-center border
                     // إرجاع ألوان الأيام والتاريخ إلى الرمادي (text-slate-800 و text-slate-400)
                     let h = `<td class="p-2 border-l border-slate-200 ${dayBg} font-bold text-emerald-800"><div>${r.dayName}</div><div class="text-[10px] text-slate-400 mt-0.5" style="display:flex;align-items:center;gap:4px;">${r.dateStr}${isRowToday ? `<span onclick="completeToday()" style="font-size:9px;background:#1D9E75;color:white;border-radius:6px;padding:2px 6px;cursor:pointer;">✓ إنهاء</span>` : ""}</div></td>`;
                     
-                    if (hasMutqan) h += `<td class="p-2 border-l border-slate-200"><div class="font-bold text-slate-800 leading-normal">${r.mutqan}</div>${r.mutqan!=="—"?`<button onclick="toggleTrack(${r.day}, 'mutqan')" class="mt-2 text-base">${getTrackEmoji(r.day, 'mutqan')}</button>`:""}</td>`;
-                    if (hasMutafalit) h += `<td class="p-2 border-l border-slate-200"><div class="font-bold text-teal-900 leading-normal">${r.mutfalet}</div>${r.mfSurahName ? `<div class="text-[9px] text-slate-400 mt-0.5">${r.mfSurahName}</div>` : ""}${r.mfFinishedNote ? `<div class="text-[9px] text-emerald-700 font-bold mt-1">${r.mfFinishedNote}</div>` : ""}${r.mutfalet!=="—"?`<button onclick="toggleTrack(${r.day}, 'mutfalet')" class="mt-2 text-base">${getTrackEmoji(r.day, 'mutfalet')}</button>`:""}</td>`;
-                    if (S.hasNew) {
+                if (hasMutqan) h += `<td class="p-2 border-l border-slate-200"><div class="font-bold text-slate-800 leading-normal">${r.mutqan}</div>${r.mutqan!=="—"?`<button onclick="toggleTrack(${r.day}, 'mutqan')" class="mt-2 text-base">${getTrackEmoji(r.day, 'mutqan')}</button>`:""}</td>`;
+if (hasMutafalit) h += `<td class="p-2 border-l border-slate-200">${r.mutfalet !== "—" ? `<div class="font-bold text-teal-900 leading-normal">${r.mutfalet}${r.mfSurahName ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfSurahName})</span>` : ""}</div>` : ""}${r.mfAddedHizb ? `<div class="font-bold text-amber-700 leading-normal mt-0.5">+ الحزب ${r.mfAddedHizb}${r.mfAddedSurah ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfAddedSurah})</span>` : ""}</div>` : ""}${r.mutfalet === "—" && !r.mfAddedHizb ? `<div class="text-slate-400">—</div>` : ""}${r.mfCumulativeText ? `<div class="text-[9px] text-slate-400 mt-1 border-t border-slate-200 pt-1">📍 ${r.mfCumulativeText}</div>` : ""}${r.mfFinishedNote ? `<div class="text-[9px] text-emerald-700 font-bold mt-1">${r.mfFinishedNote}</div>` : ""}${(r.mutfalet !== "—" || r.mfAddedHizb) ? `<button onclick="toggleTrack(${r.day}, 'mutfalet')" class="mt-2 text-base">${getTrackEmoji(r.day, 'mutfalet')}</button>` : ""}</td>`;                if (S.hasNew) {
                         h += `<td class="p-2 border-l border-slate-200 text-center align-top"><div class="font-bold text-amber-900 leading-normal">${r.newMem}</div>${r.newMem !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newMem')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newMem')}</button>` : ""}</td>
                             <td class="p-2 text-center align-top"><div class="font-bold text-indigo-900 text-[11px] leading-relaxed whitespace-pre-line">${r.newReview}</div>${r.newReview !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newReview')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newReview')}</button>` : ""}</td>`;
                     }
