@@ -733,8 +733,7 @@ async function incrementCounterDirect(counterName) {
                 if (r.isBuffer) return;
                 const rowDate = new Date(base.getTime()); rowDate.setDate(base.getDate() + (PROG.week - 1) * S.mutqanDays + (r.day - 1));
                 if (rowDate.toDateString() === new Date().toDateString()) {
-                    ['mutqan', 'mutfalet'].forEach(col => TRACKING[getTrackKey(PROG.week, r.day, col)] = 'done');
-                    if (S.hasNew) { if (r.newMem !== "—") TRACKING[getTrackKey(PROG.week, r.day, 'newMem')] = 'done'; if (r.newReview !== "—") TRACKING[getTrackKey(PROG.week, r.day, 'newReview')] = 'done'; }
+['mutqan', 'mutfaletWard', 'mutfaletCumul'].forEach(col => TRACKING[getTrackKey(PROG.week, r.day, col)] = 'done');                    if (S.hasNew) { if (r.newMem !== "—") TRACKING[getTrackKey(PROG.week, r.day, 'newMem')] = 'done'; if (r.newReview !== "—") TRACKING[getTrackKey(PROG.week, r.day, 'newReview')] = 'done'; }
                 }
             });
             saveState(); render();
@@ -762,7 +761,19 @@ async function incrementCounterDirect(counterName) {
                 const row = weekRows.find(r => r.day === d);
                 if(!S.isBeginnerMode){
                     if (row && row.mutqan !== "—") { total++; if (TRACKING[getTrackKey(PROG.week, d, 'mutqan')] === 'done') done++; }
-                    if (row && row.mutfalet !== "—") { total++; if (TRACKING[getTrackKey(PROG.week, d, 'mutfalet')] === 'done') done++; }
+            const hasWard = row && (row.mutfalet !== "—" || row.mfAddedHizb);
+            const hasCumul = row && row.mfCumulativeText;
+            if (hasWard && hasCumul) {
+                total += 2;
+                if (TRACKING[getTrackKey(PROG.week, d, 'mutfaletWard')] === 'done') done++;
+                if (TRACKING[getTrackKey(PROG.week, d, 'mutfaletCumul')] === 'done') done++;
+            } else if (hasWard) {
+                total++;
+                if (TRACKING[getTrackKey(PROG.week, d, 'mutfaletWard')] === 'done') done++;
+            } else if (hasCumul) {
+                total++;
+                if (TRACKING[getTrackKey(PROG.week, d, 'mutfaletCumul')] === 'done') done++;
+            }
                 }
                 if (S.hasNew) {
                     const isMemDay = S.newDays.includes(getDayNameByOffset(d - 1));
@@ -778,9 +789,22 @@ async function incrementCounterDirect(counterName) {
             const activeDays = S.mutqanDays - 1; let total = 0, done = 0;
             for (let d = 1; d <= activeDays; d++) {
                 if (!S.isBeginnerMode) {
-                    total += 2;
-                    if (TRACKING[getTrackKey(week, d, 'mutqan')] === 'done') done++;
-                    if (TRACKING[getTrackKey(week, d, 'mutfalet')] === 'done') done++;
+                    total++; // mutqan
+        if (TRACKING[getTrackKey(week, d, 'mutqan')] === 'done') done++;
+        const wRow = generateWeekSchedule().find(r => r.day === d);
+        const hasWard2 = wRow && (wRow.mutfalet !== "—" || wRow.mfAddedHizb);
+        const hasCumul2 = wRow && wRow.mfCumulativeText;
+        if (hasWard2 && hasCumul2) {
+            total += 2;
+            if (TRACKING[getTrackKey(week, d, 'mutfaletWard')] === 'done') done++;
+            if (TRACKING[getTrackKey(week, d, 'mutfaletCumul')] === 'done') done++;
+        } else if (hasWard2) {
+            total++;
+            if (TRACKING[getTrackKey(week, d, 'mutfaletWard')] === 'done') done++;
+        } else if (hasCumul2) {
+            total++;
+            if (TRACKING[getTrackKey(week, d, 'mutfaletCumul')] === 'done') done++;
+        }
                 }
                 if (S.hasNew) {
                     const isMemDay = S.newDays.includes(getDayNameByOffset(d - 1));
@@ -1209,7 +1233,19 @@ else if (S.step === 8) {
             
             const weekRowsForPct = generateWeekSchedule();
             const mutqanPct = (() => { let t=0, d=0; for(let i=1;i<=activeDays;i++){ const row=weekRowsForPct.find(r=>r.day===i); if(row&&row.mutqan!=="—"){t++;if(TRACKING[getTrackKey(PROG.week,i,'mutqan')]==='done')d++;} } return t===0?0:Math.round((d/t)*100); })();
-            const mutfaletPct = (() => { let t=0, d=0; for(let i=1;i<=activeDays;i++){ const row=weekRowsForPct.find(r=>r.day===i); if(row&&row.mutfalet!=="—"){t++;if(TRACKING[getTrackKey(PROG.week,i,'mutfalet')]==='done')d++;} } return t===0?0:Math.round((d/t)*100); })();
+            const mutfaletPct = (() => {
+                let t=0, d=0;
+                for(let i=1;i<=activeDays;i++){
+                    const row=weekRowsForPct.find(r=>r.day===i);
+                    if(!row) continue;
+                    const hasWard = (row.mutfalet!=="—" || row.mfAddedHizb);
+                    const hasCumul = !!row.mfCumulativeText;
+                    if(hasWard && hasCumul){ t+=2; if(TRACKING[getTrackKey(PROG.week,i,'mutfaletWard')]==='done')d++; if(TRACKING[getTrackKey(PROG.week,i,'mutfaletCumul')]==='done')d++; }
+                    else if(hasWard){ t++; if(TRACKING[getTrackKey(PROG.week,i,'mutfaletWard')]==='done')d++; }
+                    else if(hasCumul){ t++; if(TRACKING[getTrackKey(PROG.week,i,'mutfaletCumul')]==='done')d++; }
+                }
+                return t===0?0:Math.round((d/t)*100);
+            })();
             let newPct = null;
             if (S.hasNew) {
                 let t=0, d=0;
@@ -1302,7 +1338,20 @@ ${hasMutafalit ? `<th class="p-1 text-teal-800 font-extrabold text-center border
                     let h = `<td class="p-2 border-l border-slate-200 ${dayBg} font-bold text-emerald-800"><div>${r.dayName}</div><div class="text-[10px] text-slate-400 mt-0.5" style="display:flex;align-items:center;gap:4px;">${r.dateStr}${isRowToday ? `<span onclick="completeToday()" style="font-size:9px;background:#1D9E75;color:white;border-radius:6px;padding:2px 6px;cursor:pointer;">✓ إنهاء</span>` : ""}</div></td>`;
                     
                 if (hasMutqan) h += `<td class="p-2 border-l border-slate-200"><div class="font-bold text-slate-800 leading-normal">${r.mutqan}</div>${r.mutqan!=="—"?`<button onclick="toggleTrack(${r.day}, 'mutqan')" class="mt-2 text-base">${getTrackEmoji(r.day, 'mutqan')}</button>`:""}</td>`;
-if (hasMutafalit) h += `<td class="p-2 border-l border-slate-200">${r.mutfalet !== "—" ? `<div class="font-bold text-teal-900 leading-normal">${r.mutfalet}${r.mfSurahName ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfSurahName})</span>` : ""}</div>` : ""}${r.mfAddedHizb ? `<div class="font-bold text-amber-700 leading-normal mt-0.5">+ الحزب ${r.mfAddedHizb}${r.mfAddedSurah ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfAddedSurah})</span>` : ""}</div>` : ""}${r.mutfalet === "—" && !r.mfAddedHizb ? `<div class="text-slate-400">—</div>` : ""}${r.mfCumulativeText ? `<div class="text-[9px] text-slate-400 mt-1 border-t border-slate-200 pt-1">📍 ${r.mfCumulativeText}</div>` : ""}${r.mfFinishedNote ? `<div class="text-[9px] text-emerald-700 font-bold mt-1">${r.mfFinishedNote}</div>` : ""}${(r.mutfalet !== "—" || r.mfAddedHizb) ? `<button onclick="toggleTrack(${r.day}, 'mutfalet')" class="mt-2 text-base">${getTrackEmoji(r.day, 'mutfalet')}</button>` : ""}</td>`;                if (S.hasNew) {
+                if (hasMutafalit) {
+                    const cellHasWard = (r.mutfalet !== "—" || r.mfAddedHizb);
+                    const cellHasCumul = !!r.mfCumulativeText;
+                    h += `<td class="p-2 border-l border-slate-200">` +
+                        (r.mutfalet !== "—" ? `<div class="font-bold text-teal-900 leading-normal">${r.mutfalet}${r.mfSurahName ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfSurahName})</span>` : ""}</div>` : "") +
+                        (r.mfAddedHizb ? `<div class="font-bold text-amber-700 leading-normal mt-0.5">+ الحزب ${r.mfAddedHizb}${r.mfAddedSurah ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfAddedSurah})</span>` : ""}</div>` : "") +
+                        (!cellHasWard && !cellHasCumul ? `<div class="text-slate-400">—</div>` : "") +
+                        (cellHasWard ? `<button onclick="toggleTrack(${r.day}, 'mutfaletWard')" class="mt-2 text-base" title="الورد اليومي">${getTrackEmoji(r.day, 'mutfaletWard')} <span class="text-[9px] text-teal-700">الورد</span></button>` : "") +
+                        (r.mfCumulativeText ? `<div class="text-[9px] text-slate-400 mt-2 border-t border-slate-200 pt-1">📍 ${r.mfCumulativeText}</div>` + `<button onclick="toggleTrack(${r.day}, 'mutfaletCumul')" class="mt-1 text-base" title="المراجعة التراكمية">${getTrackEmoji(r.day, 'mutfaletCumul')} <span class="text-[9px] text-slate-500">التراكمي</span></button>` : "") +
+                        (r.mfFinishedNote ? `<div class="text-[9px] text-emerald-700 font-bold mt-1">${r.mfFinishedNote}</div>` : "") +
+                        `</td>`;
+                }
+
+                if (S.hasNew) {
                         h += `<td class="p-2 border-l border-slate-200 text-center align-top"><div class="font-bold text-amber-900 leading-normal">${r.newMem}</div>${r.newMem !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newMem')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newMem')}</button>` : ""}</td>
                             <td class="p-2 text-center align-top"><div class="font-bold text-indigo-900 text-[11px] leading-relaxed whitespace-pre-line">${r.newReview}</div>${r.newReview !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newReview')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newReview')}</button>` : ""}</td>`;
                     }
