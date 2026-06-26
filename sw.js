@@ -24,7 +24,13 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-    e.respondWith(
-        caches.match(e.request).then(r => r || fetch(e.request))
-    );
+    if (e.request.url.endsWith('.html') || e.request.url.endsWith('/')) {
+        e.respondWith(
+            fetch(e.request).catch(() => caches.match(e.request))
+        );
+    } else {
+        e.respondWith(
+            caches.match(e.request).then(r => r || fetch(e.request))
+        );
+    }
 });
