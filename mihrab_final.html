@@ -1527,33 +1527,33 @@ firebase.initializeApp({
 });
 const _fbDb = firebase.database();
 
-function pushToLeaderboard() {
+window.pushToLeaderboard = function() {
     try {
         const raw = localStorage.getItem('qp_current_program_v6');
         if (!raw) return;
+        
         const state = JSON.parse(raw);
-const { S, PROG, TRACKING } = state;
-const studentName = S.programName || PROG.name;
-if (!studentName) return;
+        const { S, PROG, TRACKING } = state;
+        const studentName = S.programName || PROG.name;
+        if (!studentName) return;
 
-// نستخدم النسبة المخزنة مسبقاً من calculateWeeklyProgress
-const weekPct = state._weekPct ?? 0; 
+        // 1. النسبة الدقيقة (المرجع الأساسي)
+        const weekPct = state._weekPct ?? 0; 
 
-const tk = (w, d, c) => `w${w}_d${d}_${c}`;
-const activeDays = S.mutqanDays - 1;
+        // 2. الحسابات الفرعية (للعرض فقط في اللوحة)
+        const tk = (w, d, c) => `w${w}_d${d}_${c}`;
+        const activeDays = S.mutqanDays - 1;
 
-        // متقن
         let t=0, d=0;
-        for(let i=1;i<=activeDays;i++){
+        for(let i=1; i<=activeDays; i++){
             if(TRACKING[tk(PROG.week,i,'mutqan')]!==undefined){
                 t++; if(TRACKING[tk(PROG.week,i,'mutqan')]==='done')d++;
             }
         }
         const mutqanPct = t===0 ? 0 : Math.round((d/t)*100);
 
-        // متفلت
         t=0; d=0;
-        for(let i=1;i<=activeDays;i++){
+        for(let i=1; i<=activeDays; i++){
             const kw=tk(PROG.week,i,'mutfaletWard'), kc=tk(PROG.week,i,'mutfaletCumul');
             const hw=TRACKING[kw]!==undefined, hc=TRACKING[kc]!==undefined;
             if(hw&&hc){t+=2;if(TRACKING[kw]==='done')d++;if(TRACKING[kc]==='done')d++;}
@@ -1562,34 +1562,32 @@ const activeDays = S.mutqanDays - 1;
         }
         const mutfaletPct = t===0 ? 0 : Math.round((d/t)*100);
 
-        // جديد
         let newPct = null;
-        if(S.hasNew){ t=0; d=0;
-            for(let i=1;i<=activeDays;i++){
+        if(S.hasNew){ 
+            t=0; d=0;
+            for(let i=1; i<=activeDays; i++){
                 if(TRACKING[tk(PROG.week,i,'newMem')]!==undefined){t++;if(TRACKING[tk(PROG.week,i,'newMem')]==='done')d++;}
                 if(TRACKING[tk(PROG.week,i,'newReview')]!==undefined){t++;if(TRACKING[tk(PROG.week,i,'newReview')]==='done')d++;}
             }
             newPct = t===0 ? 0 : Math.round((d/t)*100);
         }
 
-        // weekPct — متوسط مرجّح (الجديد بثقل مضاعف)
-        const parts = [mutqanPct, mutfaletPct, ...(newPct!==null?[newPct,newPct]:[])].filter(v=>v!==null);
-        const weekPct = parts.length===0 ? 0 : Math.round(parts.reduce((a,b)=>a+b,0)/parts.length);
-
+        // 3. الإرسال إلى Firebase (بكل دقة)
         const key = studentName.replace(/[.#$[\]]/g, '_');
-       _fbDb.ref('leaderboard/' + key).set({
-    name: studentName,
-    week: PROG.week,
-    weekPct: weekPct, // هذا هو المتغير الجديد الدقيق
-    mutqanPct,        // هذه بقيت كما هي ليظهر التفصيل في اللوحة
-    mutfaletPct,      // هذه بقيت كما هي
-    newPct,           // هذه بقيت كما هي
-    lastUpdate: Date.now()
-})
-        }).then(() => console.log('✅ Firebase: تم الإرسال بنجاح'))
-          .catch(e => console.error('❌ Firebase error:', e));
+        _fbDb.ref('leaderboard/' + key).set({
+            name: studentName,
+            week: PROG.week,
+            weekPct: weekPct,       // النسبة الدقيقة (المعتمدة)
+            mutqanPct: mutqanPct,   // نسب التفصيل للعرض فقط
+            mutfaletPct: mutfaletPct,
+            newPct: newPct,
+            lastUpdate: Date.now()
+        })
+        .then(() => console.log('✅ Firebase: تم الإرسال بنجاح'))
+        .catch(e => console.error('❌ Firebase error:', e));
+
     } catch(e) { console.warn('pushToLeaderboard error', e); }
-}
+};
 </script>
 </body>
 </html>
