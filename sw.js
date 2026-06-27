@@ -12,7 +12,7 @@ self.addEventListener('install', event => {
         caches.open(CACHE_NAME)
             .then(cache => cache.addAll(urlsToCache).catch(err => console.warn('Cache addAll error:', err)))
     );
-    self.skipWaiting();
+    // لا skipWaiting هنا — ننتظر إذن الصفحة عبر زر التحديث
 });
 
 self.addEventListener('activate', event => {
