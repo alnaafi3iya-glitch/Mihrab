@@ -1542,33 +1542,44 @@ const _fbDb = firebase.database();
 
 window.pushToLeaderboard = function() {
     try {
+        // 1. جلب البيانات الأساسية مع حماية ضد الـ null
         const raw = localStorage.getItem('qp_current_program_v6');
-        const statsRaw = localStorage.getItem('lastCalculatedStats');
+        if (!raw) { console.error("لا توجد بيانات برنامج"); return; }
         
-        if (!raw || !statsRaw) return;
-
         const state = JSON.parse(raw);
-        const stats = JSON.parse(statsRaw);
-        const { S, PROG } = state;
+        const { S, PROG, TRACKING } = state;
         const studentName = S.programName || PROG.name;
         
-        if (!studentName) return;
+        if (!studentName) { console.error("اسم الطالب مفقود"); return; }
 
-        const key = studentName.replace(/[.#$[\]]/g, '_');
+        // 2. استخدام دالة الحساب المباشرة لضمان دقة القيم قبل الإرسال
+        // بدلاً من الاعتماد على متغيرات قد تكون undefined
+        const weekPct = state._weekPct || 0; 
         
-        _fbDb.ref('leaderboard/' + key).set({
+        // 3. تأمين مسار Firebase
+        const key = studentName.replace(/[.#$[\\]]/g, '_');
+        
+        const dataToPush = {
             name: studentName,
-            week: PROG.week,
-            weekPct: stats.weekPct,
-            mutqanPct: stats.mutqanPct,
-            mutfaletPct: stats.mutfaletPct,
-            newPct: stats.newPct,
+            week: PROG.week || 1,
+            weekPct: weekPct,
+            mutqanPct: state._mutqanPct || 0,
+            mutfaletPct: state._mutfaletPct || 0,
+            newPct: state._newPct || null,
             lastUpdate: Date.now()
+        };
+
+        // 4. الإرسال مع تحقق
+        _fbDb.ref('leaderboard/' + key).set(dataToPush, (error) => {
+            if (error) {
+                console.error("فشل الإرسال:", error);
+            } else {
+                console.log("تم تحديث اللوحة بنجاح!");
+            }
         });
-        console.log('✅ تم إرسال النسب المخزنة بنجاح');
-        
-    } catch(e) { 
-        console.warn('خطأ في إرسال البيانات:', e); 
+
+    } catch (e) {
+        console.error("حدث خطأ أثناء معالجة البيانات:", e);
     }
 };
 </script>
