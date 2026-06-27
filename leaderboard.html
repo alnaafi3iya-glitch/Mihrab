@@ -196,14 +196,14 @@
             students.sort((a, b) => (b.weekPct ?? 0) - (a.weekPct ?? 0));
 
             const now = new Date();
-            const dayOfWeek = now.getDay(); // 0=أحد
-            const diffToSat = (dayOfWeek + 1) % 7; // المسافة للسبت الماضي
-            const satStart = new Date(now);
-            satStart.setDate(now.getDate() - diffToSat);
-            const sunEnd = new Date(satStart);
-            sunEnd.setDate(satStart.getDate() + 6);
+            const dayOfWeek = now.getDay(); // 0=أحد، 1=اثنين
+            const diffToMon = (dayOfWeek === 0) ? 6 : dayOfWeek - 1;
+            const monStart = new Date(now);
+            monStart.setDate(now.getDate() - diffToMon);
+            const sunEnd = new Date(monStart);
+            sunEnd.setDate(monStart.getDate() + 6);
             const fmt = d => `${d.getDate()} ${['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][d.getMonth()]}`;
-            weekEl.textContent = `${fmt(satStart)} — ${fmt(sunEnd)} ${sunEnd.getFullYear()}`;
+            weekEl.textContent = `${fmt(monStart)} — ${fmt(sunEnd)} ${sunEnd.getFullYear()}`;
             // المنصة: ترتيب 2، 1، 3
             const top3 = students.slice(0, 3);
             let podiumHTML = '';
