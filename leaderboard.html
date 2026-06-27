@@ -213,17 +213,17 @@
 
   // الاستماع للبيانات الحية
   const leaderRef = ref(db, 'leaderboard');
-  onValue(leaderRef, (snapshot) => {
+  onValue(ref(db, 'leaderboard'), (snapshot) => {
     loadEl.classList.add('hidden');
     const data = snapshot.val();
+    if (!data) { emptyEl.classList.remove('hidden'); return; }
 
-    if (!data) {
-      emptyEl.classList.remove('hidden');
-      podiumEl.innerHTML = '';
-      boardEl.innerHTML  = '';
-      return;
-    }
-
+    // --- التعديل هنا: الفرز التنازلي بناءً على weekPct ---
+    const students = Object.values(data).sort((a, b) => b.weekPct - a.weekPct);
+    
+    renderPodium(students);
+    renderBoard(students);
+  });
     // تحويل إلى مصفوفة ورتّب
     const students = Object.values(data);
     students.sort((a, b) => (b.weekPct ?? 0) - (a.weekPct ?? 0));
