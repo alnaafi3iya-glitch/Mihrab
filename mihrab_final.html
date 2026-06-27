@@ -1537,48 +1537,35 @@ window.pushToLeaderboard = function() {
         const studentName = S.programName || PROG.name;
         if (!studentName) return;
 
-        // 1. النسبة الدقيقة (المرجع الأساسي)
+        // 1. القيمة المرجعية الدقيقة (التي تم حسابها في calculateWeeklyProgress)
         const weekPct = state._weekPct ?? 0; 
 
-        // 2. الحسابات الفرعية (للعرض فقط في اللوحة)
-        const tk = (w, d, c) => `w${w}_d${d}_${c}`;
-        const activeDays = S.mutqanDays - 1;
+        // 2. حساب النسب التفصيلية بدقة بناءً على جدول البرنامج (ليست مطرقة للحساب بل للعرض)
+        const schedule = generateWeekSchedule(PROG.week);
+        
+        const getPct = (type) => {
+            let total = 0, done = 0;
+            schedule.forEach(day => {
+                if (day[type]) {
+                    total++;
+                    const key = `w${PROG.week}_d${day.d}_${type}`;
+                    if (TRACKING[key] === 'done') done++;
+                }
+            });
+            return total === 0 ? 0 : Math.round((done / total) * 100);
+        };
 
-        let t=0, d=0;
-        for(let i=1; i<=activeDays; i++){
-            if(TRACKING[tk(PROG.week,i,'mutqan')]!==undefined){
-                t++; if(TRACKING[tk(PROG.week,i,'mutqan')]==='done')d++;
-            }
-        }
-        const mutqanPct = t===0 ? 0 : Math.round((d/t)*100);
+        const mutqanPct = getPct('mutqan');
+        const mutfaletPct = getPct('mutfaletWard');
+        const newPct = S.hasNew ? getPct('newMem') : null;
 
-        t=0; d=0;
-        for(let i=1; i<=activeDays; i++){
-            const kw=tk(PROG.week,i,'mutfaletWard'), kc=tk(PROG.week,i,'mutfaletCumul');
-            const hw=TRACKING[kw]!==undefined, hc=TRACKING[kc]!==undefined;
-            if(hw&&hc){t+=2;if(TRACKING[kw]==='done')d++;if(TRACKING[kc]==='done')d++;}
-            else if(hw){t++;if(TRACKING[kw]==='done')d++;}
-            else if(hc){t++;if(TRACKING[kc]==='done')d++;}
-        }
-        const mutfaletPct = t===0 ? 0 : Math.round((d/t)*100);
-
-        let newPct = null;
-        if(S.hasNew){ 
-            t=0; d=0;
-            for(let i=1; i<=activeDays; i++){
-                if(TRACKING[tk(PROG.week,i,'newMem')]!==undefined){t++;if(TRACKING[tk(PROG.week,i,'newMem')]==='done')d++;}
-                if(TRACKING[tk(PROG.week,i,'newReview')]!==undefined){t++;if(TRACKING[tk(PROG.week,i,'newReview')]==='done')d++;}
-            }
-            newPct = t===0 ? 0 : Math.round((d/t)*100);
-        }
-
-        // 3. الإرسال إلى Firebase (بكل دقة)
+        // 3. الإرسال إلى Firebase
         const key = studentName.replace(/[.#$[\]]/g, '_');
         _fbDb.ref('leaderboard/' + key).set({
             name: studentName,
             week: PROG.week,
-            weekPct: weekPct,       // النسبة الدقيقة (المعتمدة)
-            mutqanPct: mutqanPct,   // نسب التفصيل للعرض فقط
+            weekPct: weekPct,
+            mutqanPct: mutqanPct,
             mutfaletPct: mutfaletPct,
             newPct: newPct,
             lastUpdate: Date.now()
