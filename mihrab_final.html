@@ -1559,13 +1559,28 @@ window.pushToLeaderboard = function() {
         // 3. تأمين مسار Firebase
         const key = studentName.replace(/[.#$[\\]]/g, '_');
         
+        // إعادة بناء الجدول لضمان دقة النسب التفصيلية
+        const schedule = typeof generateWeekSchedule === 'function' ? generateWeekSchedule(PROG.week) : [];
+        
+        const getPct = (type) => {
+            let total = 0, done = 0;
+            schedule.forEach(day => {
+                if (day[type]) {
+                    total++;
+                    const key = `w${PROG.week}_d${day.d}_${type}`;
+                    if (TRACKING[key] === 'done') done++;
+                }
+            });
+            return total === 0 ? 0 : Math.round((done / total) * 100);
+        };
+
         const dataToPush = {
             name: studentName,
             week: PROG.week || 1,
             weekPct: weekPct,
-            mutqanPct: state._mutqanPct || 0,
-            mutfaletPct: state._mutfaletPct || 0,
-            newPct: state._newPct || null,
+            mutqanPct: getPct('mutqan'),
+            mutfaletPct: getPct('mutfaletWard'),
+            newPct: S.hasNew ? getPct('newMem') : null,
             lastUpdate: Date.now()
         };
 
