@@ -160,6 +160,7 @@
     if (unitName === "ربع")      return Math.round(index * 2.516) + 1;
     if (unitName === "ثمن")      return Math.round(index * 5.033) + 1;
     if (unitName === "نصف ثمن")  return Math.round(index * 2.516) + 1;
+    if (unitName === "نصف صفحة") return Math.floor(index / 2) + 1;
     if (unitName === "حزب")      return HIZB_START_PAGES[index] || 604;
     return index + 1;
 }
