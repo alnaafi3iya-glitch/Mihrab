@@ -669,25 +669,25 @@ let fixStr = completedHizbs.filter(ch => {
                 const completedMaxHizb = Math.max(0, ...completedHizbs.filter(ch => g > ch.completedOn).map(ch => ch.hizb));
                 const effectiveMaxHizb = Math.max(transferredMaxHizb, completedMaxHizb);
 const cumStartIndex = (() => {
+    // إذا لم يكتمل أي حزب بعد، نبدأ من بداية الحفظ
     if (effectiveMaxHizb === 0) return startNewMemIndex;
+
+    // شرط النصف: إذا كان المحفوظ من الحزب أقل من نصفه، لا نستثنيه
     const ch = completedHizbs.find(c => c.hizb === effectiveMaxHizb);
     if (ch) {
         const hizbEndPage   = HIZB_START_PAGES[ch.hizb] - 1;
         const realHizbStart = HIZB_START_PAGES[ch.hizb - 1];
         const totalPages    = hizbEndPage - realHizbStart + 1;
         const harvested     = hizbEndPage - ch.rangeStart + 1;
-        if (harvested < totalPages / 2) return startNewMemIndex;
+        if (harvested < totalPages / 2) return startNewMemIndex; // أقل من النصف → لا استثناء
     }
-    const nextHizbStartPage = HIZB_START_PAGES[effectiveMaxHizb];
-    if (!nextHizbStartPage) return startNewMemIndex;
-    let unitIndex;
-    if (S.newDailyUnit === "صفحة") unitIndex = nextHizbStartPage - 1;
-    else if (S.newDailyUnit === "ربع") unitIndex = Math.floor((nextHizbStartPage - 1) / 2.516);
-    else if (S.newDailyUnit === "ثمن") unitIndex = Math.floor((nextHizbStartPage - 1) / 5.033);
-    else if (S.newDailyUnit === "حزب") unitIndex = effectiveMaxHizb;
-    else unitIndex = nextHizbStartPage - 1;
-    return Math.max(startNewMemIndex, unitIndex);
-})();                if (S.hasNew) {
+
+    // المعادلة الجذرية: أول وحدة في الحزب التالي = رقم الحزب المنتهي × عدد الوحدات في الحزب
+    // مثال: بعد الحزب 1 بالثمن → 1 × 8 = 8 = ثمن 1 ح2
+    const unitsPerHizb = UNITS_PER_HIZB[S.newDailyUnit] || 10;
+    return Math.max(startNewMemIndex, effectiveMaxHizb * unitsPerHizb);
+})();
+                if (S.hasNew) {
                     let dWeek = (g-1) % activeDays, isMemDay = S.newDays.includes(getDayNameByOffset(dWeek));
                     if (dWeek === activeDays - 1) { 
                         const unitsSaved = S.newDays.length;
