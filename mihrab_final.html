@@ -794,9 +794,18 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
             if (mfUnitIndex === totalBaseMfUnits - 1 && totalBaseMfUnits > 0 && TRACKING[getTrackKey(PROG.week, dayIndex, 'mutfalet')] === 'done' && !PROG.finishedShown) { setTimeout(() => { document.getElementById('finished-modal').style.display='flex'; PROG.finishedShown = true; saveState(); }, 500); }
                             let ns = newMemStatePerDay[globalDay] || { nMemText: "—", nRevText: "—" };
 
+                        // === حساب بداية نافذة "ورد التراكمي" في المتفلت (نافذة منزلقة) ===
+                        // تبقى البداية ثابتة = startMfIndex حتى تتجاوز نهاية الترميم (end) حد "جزء واحد" (uj وحدات) من نقطة البداية
+                        // بعدها تنزلق البداية تدريجياً وحدة بوحدة مع كل إضافة جديدة (إسقاط الوحدة الأقدم تلقائياً)
+                        const mfCumStart = (() => {
+                            if (activeMfUnitIndex <= 0) return startMfIndex;
+                            const end = startMfIndex + activeMfUnitIndex - 1;
+                            return (end <= startMfIndex + uj) ? startMfIndex : end - uj;
+                        })();
+
                         rows.push({
                             day: dayIndex, dayName: getDayNameByOffset(i), dateStr: getFormattedDateOffset(i),
-                        mfCumulativeText: (totalBaseMfUnits > 0 && activeMfUnitIndex > 0 && activeMfUnitIndex <= totalBaseMfUnits) ? formatDiscreteRange(startMfIndex, startMfIndex + Math.min(activeMfUnitIndex, totalBaseMfUnits) - 1, S.dailyUnit) : null,                        
+                        mfCumulativeText: (totalBaseMfUnits > 0 && activeMfUnitIndex > 0 && activeMfUnitIndex <= totalBaseMfUnits) ? formatDiscreteRange(mfCumStart, startMfIndex + Math.min(activeMfUnitIndex, totalBaseMfUnits) - 1, S.dailyUnit) : null,                        
                         mutqan: mutqanText, mutfalet: mfDailyText, mfFinishedNote: mfFinishedNote, mfSurahName: mfDailySurah,
                         mfAddedHizb: mfAddedHizb, mfAddedSurah: mfAddedSurah,
                             newMem: ns.nMemText, newReview: ns.nRevText, isBuffer: false, isMutafalitEmpty: (mfDailyText === "—" && !mfAddedHizb)
@@ -806,7 +815,6 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                         rows.beginnerTransferStarted = beginnerTransferStarted;
                         return rows;
                     }
-
         function getDayNameByOffset(offset) {
             const base = PROGRAM_START_DATE || new Date();
             const target = new Date(base.getTime());
