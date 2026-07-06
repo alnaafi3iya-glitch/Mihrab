@@ -347,7 +347,9 @@
                     }
                 }
             }
-
+const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) ? 6 : dayOfWeek - 1;
+            const monStart = new Date(now); monStart.setDate(now.getDate() - diffToMon); monStart.setHours(0,0,0,0);
+            const currentWeekKey = monStart.toISOString().split('T')[0];
             let filteredStudents = [];
             for (let key in leaderboardData) {
                 const s = leaderboardData[key];
@@ -371,12 +373,13 @@
                     if (sGroupId !== savedGroupId) continue;
                 }
 
-                filteredStudents.push({ key, ...s });
+                const isCurrentWeek = s.weekKey === currentWeekKey;
+                const displayData = isCurrentWeek ? s : { ...s, weekPct: 0, mutqanPct: 0, mutfaletPct: 0, newPct: (s.newPct === null || s.newPct === undefined) ? s.newPct : 0 };
+                filteredStudents.push({ key, ...displayData });
             }
 
             filteredStudents.sort((a, b) => (b.weekPct ?? 0) - (a.weekPct ?? 0));
-            const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) ? 6 : dayOfWeek - 1;
-            const monStart = new Date(now); monStart.setDate(now.getDate() - diffToMon);
+            
             const sunEnd = new Date(monStart); sunEnd.setDate(monStart.getDate() + 6);
             const fmt = d => `${d.getDate()} ${['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][d.getMonth()]}`;
             weekEl.textContent = `${fmt(monStart)} — ${fmt(sunEnd)} ${sunEnd.getFullYear()}`;
