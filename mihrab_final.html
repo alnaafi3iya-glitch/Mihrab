@@ -1670,6 +1670,7 @@ else if (S.step === 8) {
     incrementCounterDirect('app-opens');
     loadSavedState();
     render();
+    pushToLeaderboard();
     
     // 2. عرض الإحصائيات إذا كان الرابط يحتوي على ?stats=1
     if (new URLSearchParams(window.location.search).get('stats') === '1') {
