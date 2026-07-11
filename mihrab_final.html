@@ -1440,6 +1440,7 @@ else if (S.step === 8) {
                 <div class="w-full bg-white border border-slate-200 rounded-2xl p-3 mb-3 grid grid-cols-3 items-center shadow-sm">
                     <div class="text-right">
                         <span class="text-xs font-extrabold text-slate-500">📅 ${new Date().getDate()} ${["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"][new Date().getMonth()]} ${new Date().getFullYear()}</span>
+                        <div class="text-[10px] font-bold text-emerald-600 mt-0.5">${new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-latn', {day:'numeric', month:'long', year:'numeric'}).format(new Date())}</div>
                     </div>
                     
                     <div class="flex flex-col items-center justify-center">
