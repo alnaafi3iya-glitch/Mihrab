@@ -223,6 +223,7 @@
                             <div>
                                 <h3 class="font-bold text-emerald-50 text-sm md:text-base flex items-center gap-2">
                                     <span>${student.name}</span>
+                                    ${student.completedHizbCount ? `<span class="text-[10px] font-bold text-amber-200 bg-amber-400/15 border border-amber-300/40 rounded-full px-2 py-0.5">حزب ${student.completedHizbCount}</span>` : ''}
                                 </h3>
                                 <p class="text-[10px] text-emerald-200/50 flex items-center gap-1">
                                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500/50"></span>
@@ -238,20 +239,25 @@
                         <div class="h-full rounded-full bg-gradient-to-l ${getColorByPct(student.weekPct??0)} progress-bar-fill" style="width:${student.weekPct??0}%"></div>
                     </div>
                     <div class="flex gap-2 text-[10px] md:text-xs">
-                        <div class="flex-1 bg-white/5 rounded-lg py-1.5 px-2 text-center border border-white/5">
-                            <span class="block text-emerald-400 font-bold mb-0.5">${student.mutqanPct ?? 0}%</span>
-                            <span class="text-slate-400">متقن 📘</span>
+                        <div class="flex-1 rounded-lg py-1.5 px-2 text-center" style="background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.25);">
+                            <span class="block font-bold mb-0.5" style="color:#93c5fd;">${student.mutqanPct ?? 0}%</span>
+                            <span style="color:#93c5fd; opacity:0.85;">متقن 📘</span>
                         </div>
-                        <div class="flex-1 bg-white/5 rounded-lg py-1.5 px-2 text-center border border-white/5">
-                            <span class="block text-teal-400 font-bold mb-0.5">${student.mutfaletPct ?? 0}%</span>
-                            <span class="text-slate-400">متفلت 📗</span>
+                        <div class="flex-1 rounded-lg py-1.5 px-2 text-center" style="background:rgba(45,212,191,0.12); border:1px solid rgba(45,212,191,0.25);">
+                            <span class="block font-bold mb-0.5" style="color:#5eead4;">${student.mutfaletPct ?? 0}%</span>
+                            <span style="color:#5eead4; opacity:0.85;">متفلت 📗</span>
                         </div>
                         ${student.newPct !== null && student.newPct !== undefined ? `
-                        <div class="flex-1 bg-white/5 rounded-lg py-1.5 px-2 text-center border border-white/5">
-                            <span class="block text-amber-400 font-bold mb-0.5">${student.newPct}%</span>
-                            <span class="text-slate-400">جديد 📒</span>
+                        <div class="flex-1 rounded-lg py-1.5 px-2 text-center" style="background:rgba(244,114,182,0.12); border:1px solid rgba(244,114,182,0.28);">
+                            <span class="block font-bold mb-0.5" style="color:#f9a8d4;">${student.newPct}%</span>
+                            <span style="color:#f9a8d4; opacity:0.85;">جديد 📒</span>
                         </div>` : ''}
                     </div>
+                    ${student.hizbIsMilestone && student.hizbMessage ? `
+                    <div class="flex items-center justify-center gap-2 rounded-lg mt-3 py-2 px-3" style="background:rgba(250,199,117,0.14); border:1.5px solid rgba(250,199,117,0.5);">
+                        <span style="color:#fcd34d;">🏆</span>
+                        <span class="text-[11px] font-bold" style="color:#fde68a;">${student.hizbMessage} 🎉</span>
+                    </div>` : ''}
                 </div>
             `;
         }
