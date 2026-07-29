@@ -1138,7 +1138,6 @@ const activeMfUnitIndexForCumul = mfUnitsBeforeThisWeek + Math.min(i, mfDayLimit
         function getTrackKey(week, day, col) { return `w${week}_d${day}_${col}`; }
 
         function toggleTrack(day, col) {
-function toggleTrack(day, col) {
             const key = getTrackKey(PROG.week, day, col);
             if (!TRACKING[key]) TRACKING[key] = 'done'; else if (TRACKING[key] === 'done') TRACKING[key] = 'skip'; else delete TRACKING[key];
             // تسجيل الأسبوع التقويمي الحقيقي المقابل لأول لمسة فعلية لهذا الأسبوع الداخلي (لا يُكتب فوقه لاحقاً)
