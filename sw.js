@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mihrab-cache-v69';
+const CACHE_NAME = 'mihrab-cache-v70';
 const urlsToCache = [
     './',
     './mihrab_final.html',
