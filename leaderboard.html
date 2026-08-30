@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>محراب التثبيت — لوحة الشرف</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes milestoneGlow {
+    0%, 100% { box-shadow: 0 0 0 rgba(250,199,117,0); }
+    50% { box-shadow: 0 0 8px rgba(250,199,117,0.55); }
+}
+.milestone-glow-light  { animation: milestoneGlow 3.5s ease-in-out infinite; }
+.milestone-glow-medium { animation: milestoneGlow 2s ease-in-out infinite; }
+.milestone-glow-strong { animation: milestoneGlow 1s ease-in-out infinite; }
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: linear-gradient(135deg, #022c22, #064e3b, #0f172a);
+            background-attachment: fixed;
+            min-height: 100vh;
+            color: #f8fafc;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+        .podium-1 { background: linear-gradient(to top, #ca8a04, #fcd34d); box-shadow: 0 0 20px rgba(252, 211, 77, 0.4); }
+        .podium-2 { background: linear-gradient(to top, #64748b, #cbd5e1); }
+        .podium-3 { background: linear-gradient(to top, #78350f, #d97706); }
+        .text-gold { background: linear-gradient(to right, #fcd34d, #f59e0b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-row { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+        .progress-bar-fill { transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+        .live-dot { animation: pulse-dot 1.5s infinite ease-in-out; }
+        .hero-img {
+            width: 140px;
+            height: 140px;
+            object-fit: contain;
+            filter: drop-shadow(0 8px 24px rgba(252, 211, 77, 0.35));
+            margin-bottom: 10px;
+        }
+        .animate-pop {
+            animation: slideUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+    </style>
+</head>
+<body class="pb-24 antialiased">
+
+    <!-- الرأس -->
+    <header class="pt-8 pb-4 px-4 text-center relative overflow-hidden">
+        <div class="absolute inset-0 flex justify-center items-center opacity-10 pointer-events-none">
+            <div class="w-64 h-64 bg-emerald-500 rounded-full blur-[80px]"></div>
+        </div>
+        <div class="relative z-10 flex flex-col items-center">
+            <img class="hero-img" src="https://alnaafi3iya-glitch.github.io/Mihrab/icon_nobg.png?v=2" alt="محراب التثبيت"/>
+            <h1 class="text-3xl font-black text-gold tracking-wide mb-1">لوحة الشرف والمنافسة</h1>
+            <p class="text-emerald-200/80 text-sm font-bold">محراب التثبيت — <span id="week-label">جاري التحميل...</span></p>
+        </div>
+    </header>
+
+    <div class="max-w-sm mx-auto px-4 mb-4 text-center">
+        <button id="admin-entry-btn" onclick="openAdminLogin()" class="px-4 py-2 rounded-xl border border-amber-400/30 bg-amber-500/10 text-amber-300 text-xs font-black hover:bg-amber-500/20 transition">
+            <i class="fa-solid fa-shield-halved ml-1"></i> دخول الإدارة
+        </button>
+    </div>
+
+    <div id="admin-login-modal" class="hidden fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm p-4 items-center justify-center">
+        <div class="w-full max-w-sm glass-card rounded-3xl p-6 border-amber-500/30">
+            <h2 class="text-xl font-black text-amber-300 mb-2"><i class="fa-solid fa-shield-halved ml-2"></i>دخول إدارة المنافسة</h2>
+            <p class="text-xs text-emerald-100/70 mb-5">استخدمي حساب الإدارة نفسه. لن يُنشأ لكِ برنامج أو سجل ضمن الطالبات.</p>
+            <input id="admin-email-input" type="email" autocomplete="username" class="w-full mb-3 bg-[#021f11]/90 border border-emerald-500/30 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400" placeholder="بريد الإدارة">
+            <input id="admin-password-input" type="password" autocomplete="current-password" class="w-full mb-3 bg-[#021f11]/90 border border-emerald-500/30 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400" placeholder="كلمة المرور">
+            <p id="admin-login-error" class="hidden text-xs text-rose-300 font-bold mb-3"></p>
+            <div class="grid grid-cols-2 gap-3">
+                <button id="admin-login-submit" onclick="loginAsAdmin()" class="py-3 rounded-xl bg-amber-500 text-slate-950 text-xs font-black hover:bg-amber-400">دخول</button>
+                <button onclick="closeAdminLogin()" class="py-3 rounded-xl bg-white/10 text-slate-200 text-xs font-bold">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="admin-scope-toolbar" class="hidden max-w-sm mx-auto mt-2 mb-8 mx-4 p-4 glass-card rounded-2xl border-amber-500/30">
+        <div class="flex items-center justify-between gap-3 mb-3">
+            <span class="text-xs font-black text-amber-300"><i class="fa-solid fa-user-shield ml-1"></i>وضع الإدارة</span>
+            <button onclick="exitAdminMode()" class="text-[10px] font-bold text-rose-300 border border-rose-400/30 rounded-lg px-3 py-1.5">خروج الإدارة</button>
+        </div>
+        <select id="admin-scope-selector" onchange="changeAdminScope(this.value)" class="w-full bg-[#021f11]/90 border border-amber-500/30 text-amber-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none">
+            <option value="ADMIN_ALL">جميع الحلقات والحلبة العامة</option>
+            <option value="GENERAL">الحلبة العامة فقط</option>
+        </select>
+    </div>
+
+    <!-- صندوق الانضمام الفوري (يظهر عند البداية فقط) -->
+    <div id="identity-banner" class="hidden max-w-sm mx-auto mt-2 mb-8 mx-4 p-6 glass-card rounded-3xl shadow-2xl border-amber-500/20 text-right animate-pop">
+        <h3 class="text-amber-300 font-black text-sm mb-3 flex items-center gap-2 justify-start">
+            <i class="fa-solid fa-lock text-xs"></i>
+            <span>الانضمام الفوري لحلقتكِ التنافسية</span>
+        </h3>
+        <p class="text-[11px] text-emerald-200/80 leading-relaxed mb-4">يرجى تحديد حلقتكِ الكريمة وإدخال الكود، أو اختاري "طالبة جديدة" للدخول المباشر للحلبة المفتوحة.</p>
+        
+        <div class="grid grid-cols-1 gap-3 mb-3">
+            <!-- قائمة اختيار الحلقة الأساسية -->
+            <select id="group-selector" onchange="onGroupSelectorChange(this.value)" class="w-full bg-[#021f11]/90 border border-emerald-500/30 text-amber-300 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-amber-400 cursor-pointer">
+                <option value="">-- اختاري حلقتكِ الموقرة --</option>
+            </select>
+            
+            <!-- حقل الاسم اليدوي: يظهر فقط عند اختيار طالبة جديدة -->
+            <div id="manual-name-container" class="hidden">
+                <label class="block text-[10px] font-bold text-amber-300 mb-1.5 mr-1">اكتبي اسمكِ الكريم للإنشاء والتسجيل:</label>
+                <input type="text" id="manual-student-name-input" placeholder="اكتبي اسمكِ الثلاثي هنا..." class="w-full bg-[#021f11]/90 border border-emerald-500/30 text-white placeholder-emerald-850 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-amber-400 text-center">
+            </div>
+
+            <!-- حقل كود المرور: يظهر للمجموعات الخاصة فقط ويختفي تماماً للعامة وطالبة جديدة -->
+            <input type="password" id="group-pass-input" placeholder="أدخل كود الحلقة (كلمة المرور)..." class="hidden w-full bg-[#021f11]/90 border border-emerald-500/30 text-white placeholder-emerald-600 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-amber-400 text-center">
+        </div>
+        
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+            <p id="login-error-msg" class="hidden text-[10px] text-rose-400 font-bold"><i class="fa-solid fa-circle-exclamation"></i> كود التحقق غير صحيح، يرجى المحاولة مجدداً.</p>
+            <div class="w-full">
+                <button id="login-submit-btn" onclick="verifyAndBindGroup()" class="w-full py-2.5 bg-slate-700 text-slate-400 font-bold rounded-xl text-xs cursor-not-allowed">يرجى اختيار حلقة 🌟</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- مستطيل تفاصيل الحلقة الحالية -->
+    <div id="filter-banner" class="hidden max-w-xs mx-auto mb-14 mx-4 p-4 glass-card rounded-2xl text-xs font-bold border-emerald-500/30 text-emerald-100 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+            <span class="live-dot w-2 h-2 bg-emerald-50 rounded-full shadow-[0_0_10px_#10b981]"></span>
+            <span class="text-[10px]">أنتِ في <strong id="filter-group-name" class="text-amber-300">--</strong></span>
+        </div>
+        <button onclick="exitGroup()" class="bg-rose-950/40 text-rose-300 border border-rose-500/30 px-3 py-1.5 rounded-xl hover:bg-rose-500 hover:text-white transition text-[10px] font-black flex items-center gap-1">
+            <span>خروج</span> <i class="fa-solid fa-door-open"></i>
+        </button>
+    </div>
+
+    <!-- منصة التتويج ثلاثية الأبعاد -->
+    <div id="podium-container" class="hidden flex justify-center items-end gap-2 px-4 mt-4 mb-10 h-44"></div>
+
+    <!-- قائمة المتسابقات الفعالة -->
+    <main class="hidden px-4 max-w-2xl mx-auto space-y-4" id="board-container">
+        <div id="loading-state" class="flex flex-col items-center justify-center py-10 opacity-70">
+            <div class="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+            <p class="text-sm font-bold">جاري جلب بيانات المتنافسين...</p>
+        </div>
+        <div id="empty-state" class="hidden text-center py-12 glass-card rounded-3xl">
+            <div class="text-5xl mb-4">📜</div>
+            <h3 class="text-xl font-bold text-emerald-100">لا توجد بيانات لهذه المجموعة بعد</h3>
+            <p class="text-sm text-emerald-200/60 mt-2">ستظهر الأسماء هنا فور بدء إنجاز الطالبات للورد.</p>
+        </div>
+    </main>
+
+    <!-- مؤشر البث المباشر السفلي -->
+    <div id="live-indicator" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 glass-card rounded-full px-5 py-2.5 flex items-center gap-2 shadow-2xl z-50">
+        <div class="w-2.5 h-2.5 bg-rose-500 rounded-full live-dot shadow-[0_0_8px_#f43f5e]"></div>
+        <span class="text-xs font-bold text-emerald-100 tracking-wider">تحديث مباشر</span>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getDatabase, ref, onValue, set, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+        import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyC828iIVZOZQRGqkt69cg85tB8VQLxR0p8",
+            authDomain: "mihrab-leaderboard.firebaseapp.com",
+            databaseURL: "https://mihrab-leaderboard-default-rtdb.firebaseio.com",
+            projectId: "mihrab-leaderboard",
+            storageBucket: "mihrab-leaderboard.firebasestorage.app",
+            messagingSenderId: "791618163486",
+            appId: "1:791618163486:web:4afe02716d3fd5b99d6f0f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const auth = getAuth(app);
+        let authReady = auth.currentUser
+            ? Promise.resolve(auth.currentUser)
+            : signInAnonymously(auth).then(result => result.user);
+
+        const podiumEl  = document.getElementById('podium-container');
+        const boardEl   = document.getElementById('board-container');
+        const loadingEl = document.getElementById('loading-state');
+        const emptyEl   = document.getElementById('empty-state');
+        const weekEl    = document.getElementById('week-label');
+
+        let savedGroupId = localStorage.getItem('qp_leaderboard_group_id') || "";
+        let isAdminMode = false;
+        let adminScope = 'ADMIN_ALL';
+        const studentNameFromUrl = new URLSearchParams(window.location.search).get('student') || "";
+        let currentStudentName = cleanString(studentNameFromUrl) || localStorage.getItem('qp_leaderboard_student_name') || "";
+        if (currentStudentName) localStorage.setItem('qp_leaderboard_student_name', currentStudentName);
+
+        // محاولة جلب الاسم تلقائياً من ذاكرة تطبيق محراب الرئيسي المشترك
+        if (!currentStudentName) {
+            try {
+                const savedData = localStorage.getItem('qp_current_program_v6') || localStorage.getItem('qp_current_program_v7') || localStorage.getItem('qp_current_program_v5') || localStorage.getItem('qp_current_program_v4');
+                if (savedData) {
+                    const parsed = JSON.parse(savedData);
+                    currentStudentName = parsed.S?.programName || parsed.PROG?.name || parsed.name || "";
+                    if (currentStudentName) {
+                        localStorage.setItem('qp_leaderboard_student_name', currentStudentName);
+                    }
+                }
+            } catch (e) {
+                console.error("Error auto-reading student name:", e);
+            }
+        }
+
+        function cleanString(str) {
+            if(!str) return "";
+            return str.trim().replace(/\s+/g, ' ').replace(/[.#$[\]]/g, '');
+        }
+
+        function getFirebaseKey(str) {
+            if(!str) return "";
+            return str.trim().replace(/\s+/g, '_').replace(/[.#$[\]]/g, '');
+        }
+
+        function timeAgo(ts) {
+            if (!ts) return 'غير محدد';
+            const diff = Math.floor((Date.now() - ts) / 1000);
+            if (diff < 60)    return 'الآن';
+            if (diff < 3600)  return `منذ ${Math.floor(diff/60)} دقيقة`;
+            if (diff < 86400) return `منذ ${Math.floor(diff/3600)} ساعة`;
+            return `منذ ${Math.floor(diff/86400)} يوم`;
+        }
+
+        const MILESTONE_VISIBLE_MS = 2 * 60 * 60 * 1000;
+
+        // رسالة المحطة الكبرى تبقى ساعتين فقط من وقت بلوغها.
+        function getMilestoneVisualState(timestamp) {
+            if (!timestamp) return { visible: false, glowClass: '' };
+            if (Date.now() - timestamp >= MILESTONE_VISIBLE_MS) return { visible: false, glowClass: '' };
+            return { visible: true, glowClass: 'milestone-glow-light' };
+        }
+
+        function getColorByPct(pct) {
+            if (pct >= 90) return 'from-emerald-400 to-emerald-600';
+            if (pct >= 50) return 'from-amber-400 to-amber-600';
+            return 'from-rose-400 to-rose-600';
+        }
+
+        function buildPodiumItem(student, rank) {
+            const heights = { 1: 'h-32', 2: 'h-24', 3: 'h-16' };
+            const crowns  = { 1: '👑',   2: '🥈',   3: '🥉' };
+            const isFirst = rank === 1;
+            return `
+                <div class="flex flex-col items-center justify-end w-24 animate-row" style="animation-delay:${rank*100}ms">
+                    <div class="text-2xl mb-1 drop-shadow-md ${isFirst ? 'animate-bounce' : ''}">${crowns[rank]}</div>
+                    <div class="text-xs font-bold text-center truncate w-full mb-1 drop-shadow ${isFirst ? 'text-gold text-sm font-black' : 'text-slate-200'}">${student.name}</div>
+                    <div class="text-[10px] font-black bg-black/40 px-2 py-0.5 rounded-full mb-2">${student.weekPct ?? 0}%</div>
+                    <div class="w-full ${heights[rank]} podium-${rank} rounded-t-xl relative overflow-hidden">
+                        <div class="absolute inset-0 bg-white/20 opacity-0 hover:opacity-100 transition duration-300"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function buildBoardRow(student, index) {
+            const displayRank = index + 1;
+            const rankBadge = `<div class="w-8 h-8 rounded-full bg-slate-800/80 border border-slate-600 flex items-center justify-center font-bold text-slate-300 text-sm shadow-inner">${displayRank}</div>`;
+            return `
+                <div class="glass-card rounded-2xl p-4 animate-row relative overflow-hidden group border border-white/10" style="animation-delay:${(index+3)*60}ms">
+                    <div class="absolute top-0 right-0 w-1 h-full bg-gradient-to-b ${getColorByPct(student.weekPct??0)} opacity-50 group-hover:opacity-100 transition"></div>
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-3">
+                            ${rankBadge}
+                            <div>
+                                <h3 class="font-bold text-emerald-50 text-sm md:text-base flex items-center gap-2">
+                                    <span>${student.name}</span>
+                                    ${student.completedHizbCount ? `<span class="text-[10px] font-bold text-amber-200 bg-amber-400/15 border border-amber-300/40 rounded-full px-2 py-0.5">حزب ${student.completedHizbCount}</span>` : ''}
+                                </h3>
+                                <p class="text-[10px] text-emerald-200/50 flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500/50"></span>
+                                    آخر تحديث: ${timeAgo(student.lastUpdate)}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br ${getColorByPct(student.weekPct??0)}">${student.weekPct ?? 0}%</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-900/60 rounded-full h-2.5 mb-3 shadow-inner overflow-hidden border border-white/5">
+                        <div class="h-full rounded-full bg-gradient-to-l ${getColorByPct(student.weekPct??0)} progress-bar-fill" style="width:${student.weekPct??0}%"></div>
+                    </div>
+                    <div class="flex gap-2 text-[10px] md:text-xs">
+                        <div class="flex-1 rounded-lg py-1.5 px-2 text-center" style="background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.25);">
+                            <span class="block font-bold mb-0.5" style="color:#93c5fd;">${student.mutqanPct ?? 0}%</span>
+                            <span style="color:#93c5fd; opacity:0.85;">متقن 📘</span>
+                        </div>
+                        <div class="flex-1 rounded-lg py-1.5 px-2 text-center" style="background:rgba(45,212,191,0.12); border:1px solid rgba(45,212,191,0.25);">
+                            <span class="block font-bold mb-0.5" style="color:#5eead4;">${student.mutfaletPct ?? 0}%</span>
+                            <span style="color:#5eead4; opacity:0.85;">متفلت 📗</span>
+                        </div>
+                        ${student.newPct !== null && student.newPct !== undefined ? `
+                        <div class="flex-1 rounded-lg py-1.5 px-2 text-center" style="background:rgba(244,114,182,0.12); border:1px solid rgba(244,114,182,0.28);">
+                            <span class="block font-bold mb-0.5" style="color:#f9a8d4;">${student.newPct}%</span>
+                            <span style="color:#f9a8d4; opacity:0.85;">جديد 📒</span>
+                        </div>` : ''}
+                    </div>
+                    ${(() => {
+                        if (!student.hizbIsMilestone || !student.hizbMessage) return '';
+                        const vs = getMilestoneVisualState(student.hizbMilestoneTimestamp);
+                        if (!vs.visible) return '';
+                        return `
+                    <div class="flex items-center justify-center gap-2 rounded-lg mt-3 py-2 px-3 ${vs.glowClass}" style="background:rgba(250,199,117,0.14); border:1.5px solid rgba(250,199,117,0.5);">
+                        <span style="color:#fcd34d;">🏆</span>
+                        <span class="text-[11px] font-bold" style="color:#fde68a;">${student.hizbMessage} 🎉</span>
+                    </div>`;
+                    })()}
+                </div>
+            `;
+        }
+
+        let leaderboardData = {}, studentGroupsMap = {}, groupsData = {};
+        let milestoneExpiryTimer = null;
+
+        // إذا بقيت الصفحة مفتوحة، يعاد العرض عند انتهاء أقرب رسالة دون انتظار تحديث Firebase.
+        function scheduleMilestoneExpiryRefresh(students) {
+            if (milestoneExpiryTimer) {
+                clearTimeout(milestoneExpiryTimer);
+                milestoneExpiryTimer = null;
+            }
+            const now = Date.now();
+            const expiries = students
+                .filter(s => s?.hizbIsMilestone && s?.hizbMessage && Number(s?.hizbMilestoneTimestamp) > 0)
+                .map(s => Number(s.hizbMilestoneTimestamp) + MILESTONE_VISIBLE_MS)
+                .filter(expiry => expiry > now);
+            if (expiries.length === 0) return;
+            const nextExpiry = Math.min(...expiries);
+            milestoneExpiryTimer = setTimeout(runCentralRender, Math.max(50, nextExpiry - now + 50));
+        }
+
+        // مراقبة وتعديل الخيارات بناء على العنصر المحدد في القائمة المنسدلة
+        window.onGroupSelectorChange = function(val) {
+            const nameContainer = document.getElementById('manual-name-container');
+            const passInput = document.getElementById('group-pass-input');
+            const submitBtn = document.getElementById('login-submit-btn');
+            const errorEl = document.getElementById('login-error-msg');
+            
+            if (errorEl) errorEl.classList.add('hidden');
+            
+            if (val === "GENERAL") {
+                // "طالبة جديدة": إظهار حقل الاسم وإخفاء حقل كلمة المرور
+                if (nameContainer) nameContainer.classList.remove('hidden');
+                if (passInput) passInput.classList.add('hidden');
+                if (submitBtn) {
+                    submitBtn.innerHTML = "دخول وتسجيل في الحلبة العامة 🔓";
+                    submitBtn.className = "w-full py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white font-black rounded-xl text-xs shadow-md transition cursor-pointer";
+                }
+            } else if (val !== "") {
+                // الحلقة الخاصة تعتمد على الاسم المرسل تلقائياً من برنامج محراب
+                if (nameContainer) nameContainer.classList.add('hidden');
+                if (passInput) passInput.classList.remove('hidden');
+                if (submitBtn) {
+                    submitBtn.innerHTML = "دخول وتأكيد الحلقة 🔐";
+                    submitBtn.className = "w-full py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 text-white font-black rounded-xl text-xs shadow-md transition cursor-pointer";
+                }
+            } else {
+                // لم يتم الاختيار بعد
+                if (nameContainer) nameContainer.classList.add('hidden');
+                if (passInput) passInput.classList.add('hidden');
+                if (submitBtn) {
+                    submitBtn.innerHTML = "يرجى اختيار حلقة 🌟";
+                    submitBtn.className = "w-full py-2.5 bg-slate-700 text-slate-400 font-bold rounded-xl text-xs cursor-not-allowed";
+                }
+            }
+        };
+
+        // دالة تعبئة القائمة المنسدلة بالحلقات وجعل "طالبة جديدة" في نهاية القائمة
+        function populateGroupSelector() {
+            const selector = document.getElementById('group-selector');
+            if (!selector) return;
+
+            selector.innerHTML = `<option value="">-- اختاري حلقتكِ الموقرة --</option>`;
+            
+            // 1. إضافة حلقات الحفظ الخاصة أولاً
+            for (let gId in groupsData) {
+                const g = groupsData[gId];
+                if (g && g.name && g.competitionPaused !== true) {
+                    selector.innerHTML += `<option value="${gId}">${g.name} (أ. ${g.teacher})</option>`;
+                }
+            }
+
+            // 2. إضافة "طالبة جديدة" في نهاية القائمة تماماً
+            selector.innerHTML += `<option value="GENERAL">✨ طالبة جديدة / الحلبة العامة (بدون كود) ✨</option>`;
+
+            const adminSelector = document.getElementById('admin-scope-selector');
+            if (adminSelector) {
+                const selected = adminScope;
+                adminSelector.innerHTML = `<option value="ADMIN_ALL">جميع الحلقات والحلبة العامة</option><option value="GENERAL">الحلبة العامة فقط</option>`;
+                for (let gId in groupsData) {
+                    const g = groupsData[gId];
+                    if (g?.name) adminSelector.innerHTML += `<option value="${gId}">${g.name} (أ. ${g.teacher || 'غير محدد'})</option>`;
+                }
+                adminSelector.value = selected;
+            }
+        }
+
+        function runCentralRender() {
+            if (loadingEl) loadingEl.remove();
+            podiumEl.innerHTML = '';
+            boardEl.innerHTML  = '';
+
+            // إذا لم تقم الطالبة بتحديد اختيارها بعد، نظهر صندوق الدخول ونخفي لوحة الشرف
+            const activeScope = isAdminMode ? adminScope : savedGroupId;
+            if (!isAdminMode && activeScope && activeScope !== 'GENERAL' && groupsData[activeScope]?.competitionPaused === true) {
+                document.getElementById('identity-banner').classList.remove('hidden');
+                document.getElementById('filter-banner').classList.add('hidden');
+                podiumEl.classList.add('hidden');
+                boardEl.classList.add('hidden');
+                document.getElementById('live-indicator').classList.add('hidden');
+                weekEl.textContent = 'الحلبة متوقفة مؤقتًا';
+                const errorEl = document.getElementById('login-error-msg');
+                if (errorEl) {
+                    errorEl.innerText = 'أوقفت الإدارة هذه الحلبة مؤقتًا. ستعود للعمل بعد إعادة تفعيلها.';
+                    errorEl.classList.remove('hidden');
+                }
+                return;
+            }
+            if (!activeScope) {
+                document.getElementById('identity-banner').classList.remove('hidden');
+                document.getElementById('filter-banner').classList.add('hidden');
+                podiumEl.classList.add('hidden');
+                boardEl.classList.add('hidden');
+                document.getElementById('live-indicator').classList.add('hidden');
+                weekEl.textContent = 'بانتظار الانضمام...';
+                return;
+            } else {
+                // إخفاء صندوق الدخول وإظهار لوحة المنافسة المفتوحة
+                document.getElementById('identity-banner').classList.add('hidden');
+                podiumEl.classList.remove('hidden');
+                boardEl.classList.remove('hidden');
+                document.getElementById('live-indicator').classList.remove('hidden');
+
+                if (isAdminMode && activeScope === 'ADMIN_ALL') {
+                    document.getElementById('filter-banner').classList.add('hidden');
+                } else if (activeScope === 'GENERAL') {
+                    document.getElementById('filter-group-name').innerText = "الحلبة العامة المفتوحة 🌍";
+                    document.getElementById('filter-banner').classList.remove('hidden');
+                } else {
+                    const myGroupInfo = groupsData[activeScope];
+                    if (myGroupInfo) {
+                        document.getElementById('filter-group-name').innerText = `حلقة ${myGroupInfo.name} (أ. ${myGroupInfo.teacher})`;
+                        document.getElementById('filter-banner').classList.remove('hidden');
+                    } else {
+                        document.getElementById('filter-banner').classList.add('hidden');
+                    }
+                }
+            }
+const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) ? 6 : dayOfWeek - 1;
+            const monStart = new Date(now); monStart.setDate(now.getDate() - diffToMon); monStart.setHours(0,0,0,0);
+            const currentWeekKey = [
+                monStart.getFullYear(),
+                String(monStart.getMonth() + 1).padStart(2, '0'),
+                String(monStart.getDate()).padStart(2, '0')
+            ].join('-');
+            let filteredStudents = [];
+            for (let key in leaderboardData) {
+                const s = leaderboardData[key];
+                if (!s || typeof s !== 'object') continue;
+                
+                let sGroupId = null;
+                // مطابقة مرنة لتحديد مجموعة الطالبة في السحابة
+                for (let dbKey in studentGroupsMap) {
+                    if (cleanString(dbKey) === cleanString(key) || getFirebaseKey(dbKey) === getFirebaseKey(key)) { 
+                        sGroupId = studentGroupsMap[dbKey]; 
+                        break; 
+                    }
+                }
+
+                // فلترة وعرض الأسماء المناسبة
+                if (activeScope === 'ADMIN_ALL') {
+                    // الإدارة ترى جميع الطالبات دون أن تُضاف إلى المنافسة.
+                } else if (activeScope === 'GENERAL') {
+                    // الحلبة العامة: تظهر فقط الطالبات غير المنسوبات لأي حلقة خاصة
+                    if (sGroupId && sGroupId !== "") continue;
+                } else {
+                    // الحلقة الخاصة: يظهر فقط طالبات هذه الحلقة المحددة
+                    if (sGroupId !== activeScope) continue;
+                }
+
+                // انتقال تدريجي: السجل الجديد يُحكم عليه بمفتاح أسبوع النسبة الحقيقي،
+                // والسجل القديم يبقى ظاهراً مؤقتاً إلى أن تفتحه صاحبته فتستبدله النسخة الموثوقة.
+                const isCurrentWeek = s.schemaVersion === 2
+                    ? s.progressWeekKey === currentWeekKey
+                    : s.weekKey === currentWeekKey;
+                const displayData = isCurrentWeek ? s : { ...s, weekPct: 0, mutqanPct: 0, mutfaletPct: 0, newPct: (s.newPct === null || s.newPct === undefined) ? s.newPct : 0 };
+                filteredStudents.push({ key, ...displayData });
+            }
+
+            filteredStudents.sort((a, b) => (b.weekPct ?? 0) - (a.weekPct ?? 0));
+            
+            const sunEnd = new Date(monStart); sunEnd.setDate(monStart.getDate() + 6);
+            const fmt = d => `${d.getDate()} ${['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][d.getMonth()]}`;
+            weekEl.textContent = `${fmt(monStart)} — ${fmt(sunEnd)} ${sunEnd.getFullYear()}`;
+
+            if (filteredStudents.length === 0) {
+                emptyEl.classList.remove('hidden');
+                return;
+            } else {
+                emptyEl.classList.add('hidden');
+            }
+
+            const top3 = filteredStudents.slice(0, 3);
+            let podiumHTML = '';
+            if (top3[1]) podiumHTML += buildPodiumItem(top3[1], 2);
+            if (top3[0]) podiumHTML += buildPodiumItem(top3[0], 1);
+            if (top3[2]) podiumHTML += buildPodiumItem(top3[2], 3);
+            podiumEl.innerHTML = podiumHTML;
+            filteredStudents.forEach((student, index) => boardEl.innerHTML += buildBoardRow(student, index));
+            scheduleMilestoneExpiryRefresh(filteredStudents);
+        }
+
+        window.verifyAndBindGroup = async function() {
+            const selectedGId = document.getElementById('group-selector').value;
+            const errorEl = document.getElementById('login-error-msg');
+            
+            if (!selectedGId) { 
+                errorEl.innerText = "يرجى تحديد حلقة أو اختيار طالبة جديدة أولاً."; 
+                errorEl.classList.remove('hidden'); 
+                return; 
+            }
+
+            if (selectedGId === "GENERAL") {
+                // "طالبة جديدة": التحقق من إدخال الاسم وحفظه
+                const manualInput = document.getElementById('manual-student-name-input').value.trim();
+                if (!manualInput) {
+                    errorEl.innerText = "يرجى كتابة اسمكِ الكريم أولاً لإكمال الدخول.";
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+
+                const cleanName = cleanString(manualInput);
+                const firebaseKey = getFirebaseKey(manualInput);
+
+                errorEl.classList.add('hidden');
+                
+                // تسجيل الطالبة تلقائياً في قاعدة البيانات بـ 0% إذا لم تكن موجودة مسبقاً
+                const studentRef = ref(db, 'leaderboard/' + firebaseKey);
+                try {
+                    await authReady;
+                    const snapshot = await get(studentRef);
+                    if (!snapshot.exists()) {
+                        await set(studentRef, {
+                            name: cleanName,
+                            week: 1,
+                            weekPct: 0,
+                            mutqanPct: 0,
+                            mutfaletPct: 0,
+                            newPct: 0,
+                            lastUpdate: Date.now()
+                        });
+                    }
+                } catch (error) {
+                    console.error("تعذر تسجيل الطالبة:", error);
+                    errorEl.innerText = "تعذر حفظ الانضمام. تحققي من الاتصال ثم أعيدي المحاولة.";
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+
+                localStorage.setItem('qp_leaderboard_student_name', cleanName);
+                localStorage.setItem('qp_leaderboard_group_id', 'GENERAL');
+                savedGroupId = 'GENERAL';
+                currentStudentName = cleanName;
+                runCentralRender();
+            } else {
+                // "حلقة خاصة": التحقق من كود التحقق السري للحلقة فقط
+                const enteredPass = document.getElementById('group-pass-input').value.trim();
+                const targetGroup = groupsData[selectedGId];
+
+                if (targetGroup?.competitionPaused === true) {
+                    errorEl.innerText = 'هذه الحلبة متوقفة مؤقتًا من الإدارة، ولا يمكن الدخول إليها الآن.';
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+                
+                if (!enteredPass) {
+                    errorEl.innerText = "يرجى إدخال كود الحلقة الموقرة.";
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+
+                if (targetGroup && (targetGroup.competitionCode || targetGroup.password) === enteredPass) {
+                    // ربط وحفظ انتماء الطالبة لهذه الحلقة في السحابة ومحلياً
+                    const resolvedStudentName = cleanString(currentStudentName);
+                    if (!resolvedStudentName) {
+                        errorEl.innerText = "تعذر جلب اسم الطالبة. يرجى فتح الحلبة من داخل برنامج محراب.";
+                        errorEl.classList.remove('hidden');
+                        return;
+                    }
+                    try {
+                        await authReady;
+                        const firebaseKey = getFirebaseKey(resolvedStudentName);
+                        const studentRef = ref(db, 'leaderboard/' + firebaseKey);
+                        const snapshot = await get(studentRef);
+                        if (!snapshot.exists()) {
+                            await set(studentRef, {
+                                name: resolvedStudentName,
+                                week: 1,
+                                weekPct: 0,
+                                mutqanPct: 0,
+                                mutfaletPct: 0,
+                                newPct: 0,
+                                lastUpdate: Date.now()
+                            });
+                        }
+                        await set(ref(db, 'dashboard_data/student_groups/' + firebaseKey), selectedGId);
+                    } catch (error) {
+                        console.error("تعذر ربط الطالبة بالحلقة:", error);
+                        errorEl.innerText = "تعذر حفظ الانضمام. تحققي من الاتصال ثم أعيدي المحاولة.";
+                        errorEl.classList.remove('hidden');
+                        return;
+                    }
+
+                    currentStudentName = resolvedStudentName;
+                    localStorage.setItem('qp_leaderboard_student_name', resolvedStudentName);
+                    localStorage.setItem('qp_leaderboard_group_id', selectedGId);
+                    savedGroupId = selectedGId;
+                    errorEl.classList.add('hidden');
+                    runCentralRender();
+                } else {
+                    errorEl.innerText = "كود الحلقة غير صحيح، يرجى التحقق مجدداً.";
+                    errorEl.classList.remove('hidden');
+                }
+            }
+        };
+
+        window.exitGroup = function() {
+            if (isAdminMode) return exitAdminMode();
+            localStorage.removeItem('qp_leaderboard_group_id');
+            savedGroupId = "";
+            runCentralRender();
+            setTimeout(() => {
+                const selector = document.getElementById('group-selector');
+                if (selector) {
+                    selector.value = "";
+                    onGroupSelectorChange("");
+                }
+            }, 100);
+        };
+
+        window.openAdminLogin = function() {
+            const modal = document.getElementById('admin-login-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('admin-login-error').classList.add('hidden');
+            setTimeout(() => document.getElementById('admin-email-input')?.focus(), 50);
+        };
+
+        window.closeAdminLogin = function() {
+            const modal = document.getElementById('admin-login-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        };
+
+        window.loginAsAdmin = async function() {
+            const email = document.getElementById('admin-email-input').value.trim().toLowerCase();
+            const password = document.getElementById('admin-password-input').value;
+            const errorEl = document.getElementById('admin-login-error');
+            const button = document.getElementById('admin-login-submit');
+            if (!email || !password) {
+                errorEl.textContent = 'يرجى إدخال بريد الإدارة وكلمة المرور.';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            button.disabled = true;
+            button.textContent = 'جاري التحقق...';
+            try {
+                const credential = await signInWithEmailAndPassword(auth, email, password);
+                const roleSnapshot = await get(ref(db, 'dashboard_data/user_roles/' + credential.user.uid));
+                if (roleSnapshot.val()?.role !== 'admin') throw new Error('not-admin');
+                authReady = Promise.resolve(credential.user);
+                isAdminMode = true;
+                adminScope = 'ADMIN_ALL';
+                sessionStorage.setItem('qp_leaderboard_admin_mode', '1');
+                localStorage.removeItem('qp_leaderboard_student_name');
+                closeAdminLogin();
+                document.getElementById('admin-entry-btn').classList.add('hidden');
+                document.getElementById('admin-scope-toolbar').classList.remove('hidden');
+                populateGroupSelector();
+                runCentralRender();
+            } catch (error) {
+                if (auth.currentUser && !auth.currentUser.isAnonymous) await signOut(auth).catch(() => {});
+                authReady = signInAnonymously(auth).then(result => result.user);
+                errorEl.textContent = error.message === 'not-admin'
+                    ? 'هذا الحساب لا يحمل صلاحية الإدارة.'
+                    : 'بيانات دخول الإدارة غير صحيحة.';
+                errorEl.classList.remove('hidden');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'دخول';
+            }
+        };
+
+        window.changeAdminScope = function(scope) {
+            if (!isAdminMode) return;
+            adminScope = scope || 'ADMIN_ALL';
+            runCentralRender();
+        };
+
+        window.exitAdminMode = async function() {
+            isAdminMode = false;
+            adminScope = 'ADMIN_ALL';
+            sessionStorage.removeItem('qp_leaderboard_admin_mode');
+            document.getElementById('admin-scope-toolbar').classList.add('hidden');
+            document.getElementById('admin-entry-btn').classList.remove('hidden');
+            await signOut(auth).catch(() => {});
+            authReady = signInAnonymously(auth).then(result => result.user);
+            runCentralRender();
+        };
+
+        async function restoreAdminSession() {
+            const wantsAdmin = sessionStorage.getItem('qp_leaderboard_admin_mode') === '1';
+            if (!wantsAdmin || !auth.currentUser || auth.currentUser.isAnonymous) return;
+            try {
+                const roleSnapshot = await get(ref(db, 'dashboard_data/user_roles/' + auth.currentUser.uid));
+                if (roleSnapshot.val()?.role !== 'admin') return;
+                isAdminMode = true;
+                document.getElementById('admin-entry-btn').classList.add('hidden');
+                document.getElementById('admin-scope-toolbar').classList.remove('hidden');
+                populateGroupSelector();
+                runCentralRender();
+            } catch (_) {}
+        }
+
+        // الاستماع الفوري والمباشر للتغيرات السحابية
+        onValue(ref(db, 'leaderboard'), (snapshot) => { leaderboardData = snapshot.val() || {}; runCentralRender(); });
+        onValue(ref(db, 'dashboard_data/student_groups'), (snapshot) => { studentGroupsMap = snapshot.val() || {}; runCentralRender(); });
+        onValue(ref(db, 'dashboard_data/groups'), (snapshot) => { 
+            groupsData = snapshot.val() || {}; 
+            populateGroupSelector(); // تحديث فوري وعملي للقائمة المنسدلة بمجرد ورود البيانات
+            runCentralRender(); 
+        });
+        authReady.then(() => restoreAdminSession());
+        if (new URLSearchParams(window.location.search).get('admin') === '1') setTimeout(window.openAdminLogin, 100);
+    </script>
+</body>
+</html>
