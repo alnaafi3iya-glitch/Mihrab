@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="إدارة المدرسة النافعية">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#173f33"/>
+      <stop offset="1" stop-color="#0b6b4d"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <path d="M256 74 394 126v104c0 94-56 168-138 208-82-40-138-114-138-208V126Z" fill="#fff" opacity=".97"/>
+  <path d="M256 104 365 145v83c0 72-41 132-109 169-68-37-109-97-109-169v-83Z" fill="#e7f5ee"/>
+  <circle cx="256" cy="220" r="58" fill="#d4a62a"/>
+  <path d="M256 179a41 41 0 1 0 0 82 41 41 0 0 0 0-82Zm0 23a18 18 0 1 1 0 36 18 18 0 0 1 0-36Z" fill="#173f33"/>
+  <path d="M245 255h22v76h-22zm22 44h64v22h-64zm42 22h22v31h-22z" fill="#173f33"/>
+  <text x="256" y="382" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="700" fill="#173f33">إدارة</text>
+</svg>
