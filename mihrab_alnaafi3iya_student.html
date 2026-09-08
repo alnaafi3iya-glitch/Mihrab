@@ -5942,7 +5942,7 @@ else if (S.step === 8) {
                     localStorage.setItem('qps_leaderboard_student_name', studentName);
                     const groupName = S.schoolGroupName || S.schoolTeacherName || '';
                     const groupParam = groupName ? `&group=${encodeURIComponent(groupName)}` : '';
-                    window.open(`https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?student=${encodeURIComponent(studentName)}${groupParam}`, '_blank');
+                    window.open(`https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?mode=student&student=${encodeURIComponent(studentName)}`, '_blank');
                 };
                 area.appendChild(btnOpen);
             })();
