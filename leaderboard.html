@@ -169,7 +169,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { getDatabase, ref, onValue, set, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-        import { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC828iIVZOZQRGqkt69cg85tB8VQLxR0p8",
@@ -184,8 +184,9 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         const auth = getAuth(app);
-        // ملاحظة: authReady يُعرَّف لاحقاً في الملف كوعد (Promise) فوري ومتزامن —
-        // انظر التعليق عند تعريفه لسبب تجنّب الفحص المتسرع auth.currentUser هنا.
+        let authReady = auth.currentUser
+            ? Promise.resolve(auth.currentUser)
+            : signInAnonymously(auth).then(result => result.user);
 
         const podiumEl  = document.getElementById('podium-container');
         const boardEl   = document.getElementById('board-container');
@@ -193,20 +194,26 @@
         const emptyEl   = document.getElementById('empty-state');
         const weekEl    = document.getElementById('week-label');
 
-        let savedGroupId = localStorage.getItem('qp_leaderboard_group_id') || "";
+        const entryParams = new URLSearchParams(window.location.search);
+        const requestedStudentName = cleanString(entryParams.get('student') || "");
+        const requestedGroupId = String(entryParams.get('groupId') || '').trim();
+        const isDirectStudentEntry = entryParams.get('mode') === 'student' && !!requestedStudentName && !!requestedGroupId;
+
+        // الدخول القادم من برنامج الطالبة له الأولوية على أي جلسة إدارة أو حلقة
+        // قديمة محفوظة في هذا المتصفح.
+        if (isDirectStudentEntry) {
+            sessionStorage.removeItem('qp_leaderboard_admin_mode');
+            localStorage.setItem('qp_leaderboard_student_name', requestedStudentName);
+            localStorage.setItem('qp_leaderboard_group_id', requestedGroupId);
+        }
+
+        let savedGroupId = isDirectStudentEntry
+            ? requestedGroupId
+            : (localStorage.getItem('qp_leaderboard_group_id') || "");
         let isAdminMode = false;
         let adminScope = 'ADMIN_ALL';
-        const studentNameFromUrl = new URLSearchParams(window.location.search).get('student') || "";
-        const groupNameFromUrl = new URLSearchParams(window.location.search).get('group') || "";
-        const previewGroupFromUrl = new URLSearchParams(window.location.search).get('previewGroup') || "";
-        let isPreviewMode = false;
-        // زر دخول الإدارة لا يجب أن يظهر لطالبة قادمة عبر رابط محراب — يبقى فقط لمن يفتح الرابط مباشرة
-        if (studentNameFromUrl) {
-            document.getElementById('admin-entry-btn')?.classList.add('hidden');
-        }
-        let currentStudentName = cleanString(studentNameFromUrl) || localStorage.getItem('qp_leaderboard_student_name') || "";
+        let currentStudentName = requestedStudentName || localStorage.getItem('qp_leaderboard_student_name') || "";
         if (currentStudentName) localStorage.setItem('qp_leaderboard_student_name', currentStudentName);
-        let autoJoinAttempted = false;
 
         // محاولة جلب الاسم تلقائياً من ذاكرة تطبيق محراب الرئيسي المشترك
         if (!currentStudentName) {
@@ -347,54 +354,6 @@
             if (expiries.length === 0) return;
             const nextExpiry = Math.min(...expiries);
             milestoneExpiryTimer = setTimeout(runCentralRender, Math.max(50, nextExpiry - now + 50));
-        }
-
-        // دخول تلقائي مباشر عند الوصول من رابط محراب بمعامل الحلقة — دون عرض أي قائمة اختيار
-        // ودون طلب كود، لأن الحلقة معروفة أصلاً من بيانات الطالبة في محراب نفسه.
-        async function attemptAutoJoinFromGroupParam() {
-            if (autoJoinAttempted) return false;
-            if (savedGroupId) return false; // مربوطة مسبقاً بحلقة على هذا الجهاز، لا داعي لإعادة المحاولة
-            if (!groupNameFromUrl || !currentStudentName) return false;
-            if (!groupsData || Object.keys(groupsData).length === 0) return false;
-
-            const targetGId = Object.keys(groupsData).find(
-                gId => groupsData[gId]?.name && cleanString(groupsData[gId].name) === cleanString(groupNameFromUrl)
-            );
-            if (!targetGId) return false; // لم يُعثر على حلقة مطابقة بالاسم؛ يُترك المسار العادي كاحتياط
-
-            autoJoinAttempted = true;
-            const targetGroup = groupsData[targetGId];
-            if (targetGroup?.competitionPaused === true) return false; // الحلقة متوقفة، تُترك للمسار العادي
-
-            try {
-                await authReady;
-                const resolvedStudentName = cleanString(currentStudentName);
-                const firebaseKey = getFirebaseKey(resolvedStudentName);
-                const studentRef = ref(db, 'leaderboard/' + firebaseKey);
-                const snapshot = await get(studentRef);
-                if (!snapshot.exists()) {
-                    await set(studentRef, {
-                        name: resolvedStudentName,
-                        week: 1,
-                        weekPct: 0,
-                        mutqanPct: 0,
-                        mutfaletPct: 0,
-                        newPct: 0,
-                        lastUpdate: Date.now()
-                    });
-                }
-                await set(ref(db, 'dashboard_data/student_groups/' + firebaseKey), targetGId);
-
-                localStorage.setItem('qp_leaderboard_student_name', resolvedStudentName);
-                localStorage.setItem('qp_leaderboard_group_id', targetGId);
-                savedGroupId = targetGId;
-                runCentralRender();
-                return true;
-            } catch (error) {
-                console.error("تعذر الدخول التلقائي للحلقة:", error);
-                autoJoinAttempted = false; // السماح بمحاولة أخرى لاحقاً (مثلاً بعد استعادة الاتصال)
-                return false;
-            }
         }
 
         // مراقبة وتعديل الخيارات بناء على العنصر المحدد في القائمة المنسدلة
@@ -693,24 +652,7 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
         };
 
         window.exitGroup = function() {
-            if (isPreviewMode) {
-                window.close();
-                setTimeout(() => {
-                    if (!document.hidden) alert('أغلقي هذا التبويب يدوياً للعودة إلى لوحة الإدارة.');
-                }, 300);
-                return;
-            }
             if (isAdminMode) return exitAdminMode();
-            // طالبة قادمة عبر رابط محراب: حلقتها معروفة تلقائياً وليست اختياراً يدوياً،
-            // فـ"خروج" هنا يعني العودة إلى برنامجها (إغلاق هذا التبويب) لا عرض شاشة اختيار حلقة.
-            if (studentNameFromUrl) {
-                window.close();
-                // بعض المتصفحات (خصوصاً الجوال) تمنع إغلاق التبويب برمجياً؛ نوضح للطالبة ماذا تفعل حينها
-                setTimeout(() => {
-                    if (!document.hidden) alert('أغلقي هذا التبويب يدوياً للعودة إلى برنامجك.');
-                }, 300);
-                return;
-            }
             localStorage.removeItem('qp_leaderboard_group_id');
             savedGroupId = "";
             runCentralRender();
@@ -752,23 +694,22 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
             try {
                 const credential = await signInWithEmailAndPassword(auth, email, password);
                 const roleSnapshot = await get(ref(db, 'dashboard_data/user_roles/' + credential.user.uid));
-                const access = roleSnapshot.val();
-                if (!access || !['admin', 'teacher'].includes(access.role)) throw new Error('not-authorized');
-                if (access.role === 'teacher' && access.active === false) throw new Error('teacher-suspended');
-                if (access.role === 'teacher' && !access.groupId) throw new Error('teacher-no-group');
-
+                if (roleSnapshot.val()?.role !== 'admin') throw new Error('not-admin');
+                authReady = Promise.resolve(credential.user);
+                isAdminMode = true;
+                adminScope = 'ADMIN_ALL';
+                sessionStorage.setItem('qp_leaderboard_admin_mode', '1');
                 localStorage.removeItem('qp_leaderboard_student_name');
                 closeAdminLogin();
-                enterAdminSession(credential.user, access);
+                document.getElementById('admin-entry-btn').classList.add('hidden');
+                document.getElementById('admin-scope-toolbar').classList.remove('hidden');
+                populateGroupSelector();
+                runCentralRender();
             } catch (error) {
                 if (auth.currentUser && !auth.currentUser.isAnonymous) await signOut(auth).catch(() => {});
                 authReady = signInAnonymously(auth).then(result => result.user);
-                errorEl.textContent = error.message === 'teacher-suspended'
-                    ? 'أوقفت الإدارة صلاحية هذا الحساب مؤقتًا.'
-                    : error.message === 'teacher-no-group'
-                    ? 'حساب المعلمة غير مربوط بحلقة.'
-                    : error.message === 'not-authorized'
-                    ? 'هذا الحساب لا يحمل صلاحية الدخول.'
+                errorEl.textContent = error.message === 'not-admin'
+                    ? 'هذا الحساب لا يحمل صلاحية الإدارة.'
                     : 'بيانات دخول الإدارة غير صحيحة.';
                 errorEl.classList.remove('hidden');
             } finally {
@@ -786,6 +727,7 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
         window.exitAdminMode = async function() {
             isAdminMode = false;
             adminScope = 'ADMIN_ALL';
+            sessionStorage.removeItem('qp_leaderboard_admin_mode');
             document.getElementById('admin-scope-toolbar').classList.add('hidden');
             document.getElementById('admin-entry-btn').classList.remove('hidden');
             await signOut(auth).catch(() => {});
@@ -793,67 +735,30 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
             runCentralRender();
         };
 
-        // يُطبَّق نفس منطق الدخول الناجح (loginAsAdmin) هنا لتفادي ازدواج المنطق بين الحالتين
-        function applyAdminUiState(access) {
-            isAdminMode = true;
-            document.getElementById('admin-entry-btn').classList.add('hidden');
-            if (access.role === 'teacher') {
-                adminScope = access.groupId;
-                isPreviewMode = true;
-                document.getElementById('admin-scope-toolbar').classList.add('hidden');
-            } else if (previewGroupFromUrl) {
-                adminScope = previewGroupFromUrl;
-                isPreviewMode = true;
-                document.getElementById('admin-scope-toolbar').classList.add('hidden');
-            } else {
-                adminScope = 'ADMIN_ALL';
+        async function restoreAdminSession() {
+            const wantsAdmin = sessionStorage.getItem('qp_leaderboard_admin_mode') === '1';
+            if (!wantsAdmin || !auth.currentUser || auth.currentUser.isAnonymous) return;
+            try {
+                const roleSnapshot = await get(ref(db, 'dashboard_data/user_roles/' + auth.currentUser.uid));
+                if (roleSnapshot.val()?.role !== 'admin') return;
+                isAdminMode = true;
+                document.getElementById('admin-entry-btn').classList.add('hidden');
                 document.getElementById('admin-scope-toolbar').classList.remove('hidden');
-            }
-            populateGroupSelector();
-            runCentralRender();
+                populateGroupSelector();
+                runCentralRender();
+            } catch (_) {}
         }
-
-        function enterAdminSession(user, access) {
-            authReady = Promise.resolve(user);
-            applyAdminUiState(access);
-        }
-
-        // نقطة التهيئة الوحيدة: authReady يُعرَّف كوعد (Promise) واحد فوراً وبشكل متزامن هنا،
-        // فلا تستطيع أي دالة أخرى (مثل الدخول التلقائي للحلقة) الكتابة في قاعدة البيانات
-        // قبل معرفة هوية المستخدم فعلياً — بخلاف الفحص المتسرع القديم (auth.currentUser)
-        // الذي كان يفوّت جلسات الإدارة/المعلمة القادمة من admin.html لأن استعادتها غير متزامنة.
-        let authReady = (async () => {
-            const initialUser = await new Promise(resolve => {
-                const unsubscribe = onAuthStateChanged(auth, user => { unsubscribe(); resolve(user); });
-            });
-
-            if (initialUser && !initialUser.isAnonymous) {
-                try {
-                    const roleSnapshot = await get(ref(db, 'dashboard_data/user_roles/' + initialUser.uid));
-                    const access = roleSnapshot.val();
-                    const validTeacher = access?.role === 'teacher' && access.active !== false && !!access.groupId;
-                    if (access?.role === 'admin' || validTeacher) {
-                        applyAdminUiState(access);
-                        return initialUser;
-                    }
-                } catch (_) {}
-                // حساب غير صالح أو بلا صلاحية معروفة على هذا الجهاز: لا نُبقي جلسة معلّقة بلا فائدة
-                await signOut(auth).catch(() => {});
-            }
-
-            if (new URLSearchParams(window.location.search).get('admin') === '1') setTimeout(window.openAdminLogin, 100);
-            return signInAnonymously(auth).then(result => result.user);
-        })();
 
         // الاستماع الفوري والمباشر للتغيرات السحابية
         onValue(ref(db, 'leaderboard'), (snapshot) => { leaderboardData = snapshot.val() || {}; runCentralRender(); });
         onValue(ref(db, 'dashboard_data/student_groups'), (snapshot) => { studentGroupsMap = snapshot.val() || {}; runCentralRender(); });
-        onValue(ref(db, 'dashboard_data/groups'), async (snapshot) => { 
+        onValue(ref(db, 'dashboard_data/groups'), (snapshot) => { 
             groupsData = snapshot.val() || {}; 
             populateGroupSelector(); // تحديث فوري وعملي للقائمة المنسدلة بمجرد ورود البيانات
-            const autoJoined = await attemptAutoJoinFromGroupParam();
-            if (!autoJoined) runCentralRender();
+            runCentralRender(); 
         });
+        authReady.then(() => restoreAdminSession());
+        if (entryParams.get('admin') === '1' && !isDirectStudentEntry) setTimeout(window.openAdminLogin, 100);
     </script>
 </body>
 </html>
