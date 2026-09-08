@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- MIHRAB_LEADERBOARD_DIRECT_GROUP_FIX_20260908_2 -->
+<!-- MIHRAB_LEADERBOARD_DIRECT_GROUP_FIX_20260908_4 -->
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
@@ -197,21 +197,32 @@
 
         const entryParams = new URLSearchParams(window.location.search);
         const requestedStudentName = cleanString(entryParams.get('student') || "");
-        const requestedGroupId = String(entryParams.get('groupId') || '').trim();
-        const requestedGroupName = cleanString(entryParams.get('group') || "");
-        const isDirectStudentEntry = entryParams.get('mode') === 'student' && !!requestedStudentName && !!requestedGroupId;
+        const isDirectStudentEntry = entryParams.get('mode') === 'student' && !!requestedStudentName;
 
         // الدخول القادم من برنامج الطالبة له الأولوية على أي جلسة إدارة أو حلقة
         // قديمة محفوظة في هذا المتصفح.
         if (isDirectStudentEntry) {
             sessionStorage.removeItem('qp_leaderboard_admin_mode');
             localStorage.setItem('qp_leaderboard_student_name', requestedStudentName);
+            document.getElementById('admin-entry-btn')?.classList.add('hidden');
+            document.getElementById('admin-scope-toolbar')?.classList.add('hidden');
+
+            // قد تكون الإدارة مسجلة على الجهاز نفسه؛ دخول الطالبة يلغي تلك الجلسة
+            // قبل قراءة الحلبة حتى لا تتحول الواجهة إلى وضع الإدارة.
+            if (auth.currentUser && !auth.currentUser.isAnonymous) {
+                authReady = signOut(auth)
+                    .catch(() => {})
+                    .then(() => signInAnonymously(auth))
+                    .then(result => result.user);
+            }
         }
 
         let savedGroupId = isDirectStudentEntry
             ? ''
             : (localStorage.getItem('qp_leaderboard_group_id') || "");
         let directGroupResolutionPending = isDirectStudentEntry;
+        let directGroupsLoaded = false;
+        let directAssignmentsLoaded = false;
         let isAdminMode = false;
         let adminScope = 'ADMIN_ALL';
         let currentStudentName = requestedStudentName || localStorage.getItem('qp_leaderboard_student_name') || "";
@@ -243,48 +254,23 @@
             return str.trim().replace(/\s+/g, '_').replace(/[.#$[\]]/g, '');
         }
 
-        function normalizeGroupLabel(value) {
-            return String(value || '')
-                .normalize('NFKC')
-                .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
-                .replace(/[إأآٱ]/g, 'ا')
-                .replace(/(?:حلقة|المعلمة|الاستاذة|استاذة)/g, ' ')
-                .replace(/[^\u0600-\u06FF0-9]+/g, ' ')
-                .trim()
-                .replace(/\s+/g, ' ');
-        }
-
         function resolveDirectStudentGroup() {
             if (!isDirectStudentEntry) return '';
-            const expected = normalizeGroupLabel(requestedGroupName);
-            const wantsGeneral = /العامة|عام/.test(requestedGroupName);
-
-            if (expected) {
-                const matches = Object.entries(groupsData).filter(([id, group]) => {
-                    if (id === 'GENERAL' && !wantsGeneral) return false;
-                    const labels = [
-                        group?.name,
-                        group?.teacher,
-                        `حلقة ${group?.name || ''}`,
-                        `حلقة المعلمة ${group?.teacher || ''}`
-                    ].map(normalizeGroupLabel).filter(Boolean);
-                    return labels.includes(expected);
-                }).map(([id]) => id);
-                if (matches.length === 1) return matches[0];
-                if (matches.length > 1 && matches.includes(requestedGroupId)) return requestedGroupId;
-                if (matches.length > 1) return '';
-            }
-
-            // لا نقبل GENERAL لحلقة تحمل اسماً خاصاً، ولا نقبل معرّفاً غير موجود.
-            if (requestedGroupId === 'GENERAL' && requestedGroupName && !wantsGeneral) return '';
-            if (requestedGroupId !== 'GENERAL' && groupsData[requestedGroupId]) return requestedGroupId;
-
-            // ربط الاسم احتياط أخير، بعد التأكد من أن الحلقة موجودة.
             const studentKey = Object.keys(studentGroupsMap).find(key =>
                 cleanString(key) === cleanString(requestedStudentName) ||
                 getFirebaseKey(key) === getFirebaseKey(requestedStudentName));
             const assignedId = studentKey ? String(studentGroupsMap[studentKey] || '') : '';
+            if (assignedId === 'GENERAL') return 'GENERAL';
             return assignedId && groupsData[assignedId] ? assignedId : '';
+        }
+
+        function finishDirectStudentEntryIfReady() {
+            if (!isDirectStudentEntry || !directGroupsLoaded || !directAssignmentsLoaded) return;
+            const resolvedGroupId = resolveDirectStudentGroup();
+            directGroupResolutionPending = false;
+            savedGroupId = resolvedGroupId;
+            if (resolvedGroupId) localStorage.setItem('qp_leaderboard_group_id', resolvedGroupId);
+            else localStorage.removeItem('qp_leaderboard_group_id');
         }
 
         function timeAgo(ts) {
@@ -792,6 +778,7 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
         };
 
         async function restoreAdminSession() {
+            if (isDirectStudentEntry) return;
             const wantsAdmin = sessionStorage.getItem('qp_leaderboard_admin_mode') === '1';
             if (!wantsAdmin || !auth.currentUser || auth.currentUser.isAnonymous) return;
             try {
@@ -807,19 +794,16 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
 
         // الاستماع الفوري والمباشر للتغيرات السحابية
         onValue(ref(db, 'leaderboard'), (snapshot) => { leaderboardData = snapshot.val() || {}; runCentralRender(); });
-        onValue(ref(db, 'dashboard_data/student_groups'), (snapshot) => { studentGroupsMap = snapshot.val() || {}; runCentralRender(); });
+        onValue(ref(db, 'dashboard_data/student_groups'), (snapshot) => {
+            studentGroupsMap = snapshot.val() || {};
+            directAssignmentsLoaded = true;
+            finishDirectStudentEntryIfReady();
+            runCentralRender();
+        });
         onValue(ref(db, 'dashboard_data/groups'), (snapshot) => { 
             groupsData = snapshot.val() || {}; 
-            if (isDirectStudentEntry) {
-                const resolvedGroupId = resolveDirectStudentGroup();
-                directGroupResolutionPending = false;
-                savedGroupId = resolvedGroupId;
-                if (resolvedGroupId) {
-                    localStorage.setItem('qp_leaderboard_group_id', resolvedGroupId);
-                } else {
-                    localStorage.removeItem('qp_leaderboard_group_id');
-                }
-            }
+            directGroupsLoaded = true;
+            finishDirectStudentEntryIfReady();
             populateGroupSelector(); // تحديث فوري وعملي للقائمة المنسدلة بمجرد ورود البيانات
             runCentralRender(); 
         });
