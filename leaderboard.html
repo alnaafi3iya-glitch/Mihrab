@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- MIHRAB_LEADERBOARD_DIRECT_GROUP_FIX_20260908_4 -->
+<!-- MIHRAB_LEADERBOARD_FORCED_STUDENT_RETURN_FIX_20260908_6 -->
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
@@ -547,12 +547,11 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
                     if (sGroupId !== activeScope) continue;
                 }
 
-                // انتقال تدريجي: السجل الجديد يُحكم عليه بمفتاح أسبوع النسبة الحقيقي،
-                // والسجل القديم يبقى ظاهراً مؤقتاً إلى أن تفتحه صاحبته فتستبدله النسخة الموثوقة.
-                const isCurrentWeek = s.schemaVersion === 2
-                    ? s.progressWeekKey === currentWeekKey
-                    : s.weekKey === currentWeekKey;
-                const displayData = isCurrentWeek ? s : { ...s, weekPct: 0, mutqanPct: 0, mutfaletPct: 0, newPct: (s.newPct === null || s.newPct === undefined) ? s.newPct : 0 };
+                // ملف الطالبة يحسب نسبة الحلبة المقيدة باليوم الحالي قبل إرسالها،
+                // لذلك تعرض الحلبة القيمة المنشورة كما هي ولا تعيد تصفيرها بسبب اختلاف
+                // مفتاح الأسبوع (وهو ما كان يخفي النسبة الصحيحة بعد تغيير مرحلة البرنامج
+                // أو عند فتح الحلبة قرب حدّ الانتقال بين أسبوعين).
+                const displayData = s;
                 filteredStudents.push({ key, ...displayData });
             }
 
@@ -695,16 +694,15 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
 
         window.exitGroup = function() {
             if (isAdminMode) return exitAdminMode();
-            localStorage.removeItem('qp_leaderboard_group_id');
-            savedGroupId = "";
-            runCentralRender();
-            setTimeout(() => {
-                const selector = document.getElementById('group-selector');
-                if (selector) {
-                    selector.value = "";
-                    onGroupSelectorChange("");
-                }
-            }, 100);
+
+            // خروج الطالبة يعيدها دائماً إلى برنامجها في التبويب الحالي.
+            // لا نعتمد على window.close أو window.opener لأن التبويب السابق قد يكون
+            // لوحة إدارة/اختيار قديمة، ولأن بعض المتصفحات تمنع إغلاق التبويب برمجياً.
+            const studentProgramUrl = new URL(
+                './mihrab_alnaafi3iya_student.html?from=leaderboard',
+                window.location.href
+            ).href;
+            window.location.replace(studentProgramUrl);
         };
 
         window.openAdminLogin = function() {
