@@ -198,6 +198,7 @@
         const entryParams = new URLSearchParams(window.location.search);
         const requestedStudentName = cleanString(entryParams.get('student') || "");
         const isDirectStudentEntry = entryParams.get('mode') === 'student' && !!requestedStudentName;
+        const requestedPreviewGroup = cleanString(entryParams.get('previewGroup') || "");
 
         // الدخول القادم من برنامج الطالبة له الأولوية على أي جلسة إدارة أو حلقة
         // قديمة محفوظة في هذا المتصفح.
@@ -794,17 +795,20 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
 
         async function restoreAdminSession() {
             if (isDirectStudentEntry) return;
-            const wantsAdmin = sessionStorage.getItem('qp_leaderboard_admin_mode') === '1';
-            if (!wantsAdmin || !auth.currentUser || auth.currentUser.isAnonymous) return;
+            const wantsAdmin = entryParams.get('admin') === '1' || sessionStorage.getItem('qp_leaderboard_admin_mode') === '1';
+            if (!wantsAdmin) return;
+            if (!auth.currentUser || auth.currentUser.isAnonymous) { window.openAdminLogin(); return; }
             try {
                 const roleSnapshot = await get(ref(db, 'dashboard_data/user_roles/' + auth.currentUser.uid));
-                if (roleSnapshot.val()?.role !== 'admin') return;
+                if (roleSnapshot.val()?.role !== 'admin') { window.openAdminLogin(); return; }
                 isAdminMode = true;
+                sessionStorage.setItem('qp_leaderboard_admin_mode', '1');
                 document.getElementById('admin-entry-btn').classList.add('hidden');
                 document.getElementById('admin-scope-toolbar').classList.remove('hidden');
                 populateGroupSelector();
+                if (requestedPreviewGroup) adminScope = requestedPreviewGroup;
                 runCentralRender();
-            } catch (_) {}
+            } catch (_) { window.openAdminLogin(); }
         }
 
         // الاستماع الفوري والمباشر للتغيرات السحابية
@@ -823,7 +827,6 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
             runCentralRender(); 
         });
         authReady.then(() => restoreAdminSession());
-        if (entryParams.get('admin') === '1' && !isDirectStudentEntry) setTimeout(window.openAdminLogin, 100);
     </script>
 </body>
 </html>
