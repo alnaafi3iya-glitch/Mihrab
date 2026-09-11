@@ -579,6 +579,90 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
             return !!S.hasNew && S.newReviewEnabled !== false;
         }
 
+        // نسخة المعلمة: التخطيط هو العرض الافتراضي، ويمكن إظهار التوزيع
+        // الفعلي المبني على الإنجاز دون تغيير قواعد الإنجاز نفسها.
+        function isPlannedDistributionView() {
+            return (PROG.teacherDistributionView || 'planned') === 'planned';
+        }
+
+        function setTeacherDistributionView(mode) {
+            PROG.teacherDistributionView = mode === 'actual' ? 'actual' : 'planned';
+            saveState();
+            render();
+        }
+
+        // MIH-006 / OBS-13: يبقى تخطيط الأسبوع ثابتاً، ويُرحَّل إلى
+        // الأسبوع التالي فقط أطول تسلسل منجز فعلياً بلا فجوة.
+        function getNewMemBaseIndex() {
+            return getStartingAbsIndex(
+                S.newStartUnit,
+                S.newStartFrom,
+                S.newDailyUnit,
+                S.newStartFromQuarter
+            );
+        }
+
+        function getNewMemPlannedDays() {
+            const orderedDays = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+            return orderedDays
+                .map((name, index) => ({ name, day: index + 1 }))
+                .filter(item => Array.isArray(S.newDays) && S.newDays.includes(item.name));
+        }
+
+        function getNewMemPlannedAdvanceCount(week, upToDay = 6) {
+            if (!isNewMemIntakeEnabled() || week < 1) return 0;
+            let count = 0;
+            for (const item of getNewMemPlannedDays()) {
+                if (item.day > upToDay) break;
+                if (isPlannedDistributionView()) {
+                    count++;
+                    continue;
+                }
+                if (getTrackStatus(week, item.day, 'newMem') !== 'done') break;
+                count++;
+            }
+            return count;
+        }
+
+        function getNewMemWeekStartIndex(week) {
+            let index = getNewMemBaseIndex();
+            for (let w = 1; w < Math.max(1, week); w++) {
+                index += getNewMemPlannedAdvanceCount(w);
+            }
+            return index;
+        }
+
+        function getNewReviewEndIndexForDay(week, day) {
+            const startIndex = getNewMemWeekStartIndex(week);
+            let included = 0;
+            for (const item of getNewMemPlannedDays()) {
+                if (item.day >= day) break;
+                if (isPlannedDistributionView()) {
+                    included++;
+                    continue;
+                }
+                if (getTrackStatus(week, item.day, 'newMem') !== 'done') break;
+                included++;
+            }
+            return included > 0 ? startIndex + included - 1 : startIndex - 1;
+        }
+
+        function getTrackPositionForGlobalDay(globalDay) {
+            const activeDays = getDisplayActiveDays();
+            const shifted = globalDay + getProgramInitialBlankDays();
+            return {
+                week: Math.floor((shifted - 1) / activeDays) + 1,
+                day: ((shifted - 1) % activeDays) + 1
+            };
+        }
+
+        function isSequentialTrackDayBlocked(day, col, rows) {
+            if (!['newMem', 'mutfaletWard', 'mutfaletNewHizb'].includes(col)) return false;
+            return rows
+                .filter(row => !row.isBuffer && row.day < day && isTrackableCell(row, col))
+                .some(row => getTrackStatus(PROG.week, row.day, col) !== 'done');
+        }
+
         function getNewMemPauseGlobalDay() {
             const activeDays = getDisplayActiveDays();
             const initialBlankDays = getProgramInitialBlankDays();
@@ -3689,14 +3773,28 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
         function getMfTimelineUnitsBeforeDay(globalDay, activeDaysPerWeek, mfDayLimit) {
             const epoch = Number.isInteger(PROG.mfEpochGlobalDay) ? PROG.mfEpochGlobalDay : 0;
             if (globalDay <= epoch + 1) return 0;
+            const targetPosition = getTrackPositionForGlobalDay(globalDay);
             let count = 0;
+            const stoppedWeeks = new Set();
             for (let d = epoch + 1; d < globalDay; d++) {
-                if (
-                    isMfEligibleGlobalDay(d, activeDaysPerWeek, mfDayLimit) &&
-                    !isOriginalMfPausedOn(d)
-                ) {
+                if (!isMfEligibleGlobalDay(d, activeDaysPerWeek, mfDayLimit) || isOriginalMfPausedOn(d)) continue;
+                const position = getTrackPositionForGlobalDay(d);
+                if (position.week === targetPosition.week) {
+                    // داخل الأسبوع يبقى التخطيط ثابتاً؛ القفل يمنع إنجاز
+                    // الورد اللاحق قبل السابق، والتسوية تتم أول الأسبوع التالي.
                     count++;
+                    continue;
                 }
+                if (isPlannedDistributionView()) {
+                    count++;
+                    continue;
+                }
+                if (stoppedWeeks.has(position.week)) continue;
+                if (getTrackStatus(position.week, position.day, 'mutfaletWard') !== 'done') {
+                    stoppedWeeks.add(position.week);
+                    continue;
+                }
+                count++;
             }
             return count;
         }
@@ -3815,8 +3913,8 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
                 : getEndingAbsIndexForPage(fP.end, S.dailyUnit);
             const totalBaseMfUnits = Math.max(0, endMfIndex - startMfIndex + 1);
 
-            let newMemIndex = isNewReviewEnabled() ? getStartingAbsIndex(S.newStartUnit, S.newStartFrom, S.newDailyUnit, S.newStartFromQuarter) : 0;
-            let startNewMemIndex = newMemIndex;
+            let newMemIndex = isNewReviewEnabled() ? getNewMemWeekStartIndex(1) : 0;
+            let startNewMemIndex = isNewReviewEnabled() ? getNewMemBaseIndex() : 0;
             const programStartPage = unitFirstRealPage(startNewMemIndex, S.newDailyUnit);
             let uPerHizbNew = UNITS_PER_HIZB[S.newDailyUnit] || 1;
 
@@ -4080,6 +4178,10 @@ const cumStartIndex = (() => {
                         ? g < pauseGlobalDay
                         : isNewMemIntakeEnabled();
                     let dWeek = (g - 1 + initialBlankDays) % activeDays;
+                    const planWeek = Math.floor((g - 1 + initialBlankDays) / activeDays) + 1;
+                    if (g === 1 || dWeek === 0) {
+                        newMemIndex = getNewMemWeekStartIndex(planWeek);
+                    }
                     let isMemDay = intakeActiveToday && S.newDays.includes(getDayNameByOffset(dWeek));
                     if (dWeek === activeDays - 1) { 
                         const weekFirstGlobalDay = g - dWeek;
@@ -4095,10 +4197,12 @@ const cumStartIndex = (() => {
                                 S.newDays.includes(getDayNameByOffset(weekOffset))
                             ) unitsSaved++;
                         }
+                        const startOfThisWeek = getNewMemWeekStartIndex(planWeek);
+                        const weeklyReviewEnd = getNewReviewEndIndexForDay(planWeek, activeDays);
+                        unitsSaved = Math.max(0, weeklyReviewEnd - startOfThisWeek + 1);
                         let weeklyRev = "";
                         if (unitsSaved > 0) {
-                            let startOfThisWeek = Math.max(startNewMemIndex, newMemIndex - unitsSaved);
-                            weeklyRev = `<span class="text-[10.5px] text-teal-700 font-bold">مراجعة الأسبوع ×3</span><br/><span class="text-slate-600">${formatDiscreteRange(startOfThisWeek, newMemIndex - 1, S.newDailyUnit)}</span>`;
+                            weeklyRev = `<span class="text-[10.5px] text-teal-700 font-bold">مراجعة الأسبوع ×3</span><br/><span class="text-slate-600">${formatNewReviewRangeHTML(startOfThisWeek, startOfThisWeek + unitsSaved - 1, S.newDailyUnit)}</span>`;
                         }
                         // التعديل 2: دمج "تثبيت الحزب" مع "مراجعة الأسبوع" في يوم السبت دون أن يحذف أحدهما الآخر
                         nRevText = fixStr ? `${fixStr}${weeklyRev ? '<hr class="my-1.5 border-emerald-100"/>' + weeklyRev : ''}` : (weeklyRev || "—");
@@ -4865,10 +4969,10 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                 const rowDate = new Date(base.getTime()); rowDate.setDate(base.getDate() + (PROG.week - 1) * getDisplayCycleDays() + (r.day - 1));
                 if (rowDate.toDateString() === new Date().toDateString()) {
                     if (isTrackableCell(r, 'mutqan')) setTrackStatus(PROG.week, r.day, 'mutqan', 'done');
-                    if (isTrackableCell(r, 'mutfaletWard')) setTrackStatus(PROG.week, r.day, 'mutfaletWard', 'done');
+                    if (isTrackableCell(r, 'mutfaletWard') && !isSequentialTrackDayBlocked(r.day, 'mutfaletWard', rows)) setTrackStatus(PROG.week, r.day, 'mutfaletWard', 'done');
                     if (isTrackableCell(r, 'mutfaletCumul')) setTrackStatus(PROG.week, r.day, 'mutfaletCumul', 'done');
-                    if (isTrackableCell(r, 'mutfaletNewHizb')) setTrackStatus(PROG.week, r.day, 'mutfaletNewHizb', 'done');
-                    if (isTrackableCell(r, 'newMem')) setTrackStatus(PROG.week, r.day, 'newMem', 'done');
+                    if (isTrackableCell(r, 'mutfaletNewHizb') && !isSequentialTrackDayBlocked(r.day, 'mutfaletNewHizb', rows)) setTrackStatus(PROG.week, r.day, 'mutfaletNewHizb', 'done');
+                    if (isTrackableCell(r, 'newMem') && !isSequentialTrackDayBlocked(r.day, 'newMem', rows)) setTrackStatus(PROG.week, r.day, 'newMem', 'done');
                     if (isTrackableCell(r, 'newReview')) setTrackStatus(PROG.week, r.day, 'newReview', 'done');
                 }
             });
@@ -4906,8 +5010,20 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
         }
 
         function toggleTrack(day, col) {
-            const row = generateWeekSchedule().find(r => !r.isBuffer && r.day === day);
+            const rows = generateWeekSchedule();
+            const row = rows.find(r => !r.isBuffer && r.day === day);
             if (!isTrackableCell(row, col)) return;
+            if (isSequentialTrackDayBlocked(day, col, rows)) {
+                const current = getTrackStatus(PROG.week, day, col);
+                if (current === 'skip') setTrackStatus(PROG.week, day, col, null);
+                else setTrackStatus(PROG.week, day, col, 'skip');
+                saveState(); render();
+                pushToLeaderboard({ recordActivity: true });
+                alert(col === 'newMem'
+                    ? 'يجب إنجاز ورد الحفظ السابق أولاً قبل الانتقال إلى هذا الورد.'
+                    : 'يجب إنجاز ورد المتفلت السابق أولاً قبل الانتقال إلى هذا الورد.');
+                return;
+            }
             const current = getTrackStatus(PROG.week, day, col);
             if (!current) setTrackStatus(PROG.week, day, col, 'done');
             else if (current === 'done') setTrackStatus(PROG.week, day, col, 'skip');
@@ -5994,9 +6110,16 @@ else if (S.step === 8) {
                 </div>
                 <div class="mb-4 w-full"><div style="display:grid;grid-template-columns:repeat(${bars.length},1fr);gap:8px;">${bars.join('')}</div></div>                
                 ${stations.length > 0 ? renderJourneyStripHtml() : ''}
-                <div class="w-full grid grid-cols-2 gap-3 mb-6">
+                <div class="w-full grid grid-cols-2 gap-3 mb-3">
                     <button onclick="exportDataToFile()" class="py-3 bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 rounded-xl hover:bg-emerald-100 transition text-xs flex items-center justify-center gap-2">💾 حفظ نسخة من البرنامج</button>
                     <button onclick="openRulesModal()" class="py-3 bg-teal-50 text-teal-700 font-bold border border-teal-200 rounded-xl hover:bg-teal-100 transition text-xs flex items-center justify-center gap-2">📖 شرح النظام</button>
+                </div>
+                <div class="w-full bg-white border border-slate-200 rounded-2xl p-2 mb-3 shadow-sm">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;" role="group" aria-label="طريقة عرض توزيع الأسابيع">
+                        <button onclick="setTeacherDistributionView('planned')" aria-pressed="${isPlannedDistributionView()}" style="padding:9px 8px;border-radius:11px;font-size:11px;font-weight:800;border:1px solid ${isPlannedDistributionView() ? '#047857' : '#e2e8f0'};background:${isPlannedDistributionView() ? '#ecfdf5' : '#fff'};color:${isPlannedDistributionView() ? '#047857' : '#64748b'};">📅 التوزيع المخطط</button>
+                        <button onclick="setTeacherDistributionView('actual')" aria-pressed="${!isPlannedDistributionView()}" style="padding:9px 8px;border-radius:11px;font-size:11px;font-weight:800;border:1px solid ${!isPlannedDistributionView() ? '#047857' : '#e2e8f0'};background:${!isPlannedDistributionView() ? '#ecfdf5' : '#fff'};color:${!isPlannedDistributionView() ? '#047857' : '#64748b'};">✅ التوزيع الفعلي</button>
+                    </div>
+                    <div style="margin-top:6px;text-align:center;font-size:9px;font-weight:700;color:#64748b;">${isPlannedDistributionView() ? 'معاينة الخطة كاملة دون اشتراط الإنجاز' : 'التوزيع بحسب الإنجاز المتتابع الحقيقي'}</div>
                 </div>
                 
                 <div class="w-full bg-white border border-slate-200 rounded-2xl shadow-sm mb-3" style="width:100%;overflow-x:auto;box-sizing:border-box;" id="tbl-wrapper"></div>
