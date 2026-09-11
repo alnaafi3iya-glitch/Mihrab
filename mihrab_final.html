@@ -119,6 +119,22 @@
         @media (max-width: 640px) {
             .new-review-cell-text .whitespace-nowrap { white-space: normal; }
         }
+        .mutafalit-cumulative-row {
+            min-width: 0;
+            align-items: flex-start;
+        }
+        .mutafalit-cumulative-text {
+            display: block;
+            flex: 1 1 0;
+            min-width: 0;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+            word-break: normal;
+            white-space: normal;
+        }
+        @media (max-width: 640px) {
+            .mutafalit-cumulative-text .whitespace-nowrap { white-space: normal; }
+        }
         .new-review-plus {
             margin-inline-end: 2px;
             color: #b45309;
@@ -6240,7 +6256,7 @@ else if (S.step === 8) {
                     h += `<td class="p-2 border-l border-slate-200">` +
                         (cellEmpty ? `<div class="text-slate-400">—</div>` : "") +
                         (cellHasWard ? `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletWard')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletWard')}</button><span class="font-bold text-center whitespace-pre-line text-teal-950 text-[12px] leading-normal px-1.5 py-0.5 rounded-md border border-teal-300" style="background:#ccfbf1;">${r.mutfalet}${r.mfSurahName ? ` <span class="font-normal text-[10px] text-teal-700">(${r.mfSurahName})</span>` : ""}</span></div>` : "") +
-                        (cellHasCumul ? `<div class="flex items-center gap-1.5 mt-1"><button onclick="toggleTrack(${r.day}, 'mutfaletCumul')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletCumul')}</button><span class="text-[9px] text-slate-500">📍 ${Array.isArray(r.mfCumulativeSegments) ? renderHalfThumnPartsHTML(flattenMfCumulativeSegments(r.mfCumulativeSegments)) : renderCumulativeTextHTML(r.mfCumulativeText)}</span></div>` : "") +
+                        (cellHasCumul ? `<div class="mutafalit-cumulative-row flex gap-1.5 mt-1"><button onclick="toggleTrack(${r.day}, 'mutfaletCumul')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletCumul')}</button><span class="mutafalit-cumulative-text text-[9px] text-slate-500">📍 ${Array.isArray(r.mfCumulativeSegments) ? renderHalfThumnPartsHTML(flattenMfCumulativeSegments(r.mfCumulativeSegments)) : renderCumulativeTextHTML(r.mfCumulativeText)}</span></div>` : "") +
                         (r.mfFinishedNote ? `<div class="text-[9px] text-emerald-700 font-bold mt-1">${r.mfFinishedNote}</div>` : "") +
                         (cellHasNewHizb ? `<hr class="my-1.5 border-slate-200"/>` +
                             `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletNewHizb')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletNewHizb')}</button><span class="font-bold text-amber-700 text-[11px] leading-normal">${r.mfAddedIsCarryRange ? `من ص${r.mfAddedRange.start} إلى ص${r.mfAddedRange.end}` : `الحزب ${r.mfAddedHizb}${r.mfAddedSurah ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfAddedSurah})</span>` : ""}`}</span></div>` : "") +
