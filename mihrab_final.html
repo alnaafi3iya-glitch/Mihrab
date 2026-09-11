@@ -110,6 +110,15 @@
             line-height: 1.55;
         }
         .new-review-part { display: block; }
+        .new-review-cell-text {
+            max-width: 100%;
+            min-width: 0;
+            overflow-wrap: anywhere;
+            word-break: normal;
+        }
+        @media (max-width: 640px) {
+            .new-review-cell-text .whitespace-nowrap { white-space: normal; }
+        }
         .new-review-plus {
             margin-inline-end: 2px;
             color: #b45309;
@@ -2956,13 +2965,39 @@ if (unitName === "نصف حزب") return `نصف حزب ${(index % 2) + 1} ح${M
         // دالة مشتركة لعرض أجزاء نصف الثمن المتراكمة (تُستخدم في مراجعة الجديد والمتفلت
         // التراكمي كليهما بنفس الصيغة): تفكيك، وصل بعلامة +، وتمييز الحزب المكتمل بلون
         // فقط دون خلفية.
+        // كل حزبين كاملين متجاورين من الجزء نفسه يُختصران إلى جزء كامل:
+        // ح1 + ح2 = ج1، ح3 + ح4 = ج2... ولا تُدمج الأحزاب غير المتزاوجة.
+        function compactCompletedHizbsToJuz(parts) {
+            const compacted = [];
+            for (let index = 0; index < parts.length; index++) {
+                const current = parts[index];
+                const next = parts[index + 1];
+                const currentMatch = String(current.text).trim().match(/^ح(\d+)$/);
+                const nextMatch = next && String(next.text).trim().match(/^ح(\d+)$/);
+                if (currentMatch && nextMatch) {
+                    const currentHizb = Number(currentMatch[1]);
+                    const nextHizb = Number(nextMatch[1]);
+                    const firstHizb = Math.min(currentHizb, nextHizb);
+                    const secondHizb = Math.max(currentHizb, nextHizb);
+                    if (firstHizb % 2 === 1 && secondHizb === firstHizb + 1) {
+                        compacted.push({ text: `ج${(firstHizb + 1) / 2}`, size: 32 });
+                        index++;
+                        continue;
+                    }
+                }
+                compacted.push(current);
+            }
+            return compacted;
+        }
+
         function renderHalfThumnPartsHTML(orderedParts) {
-            return orderedParts.map((part, index) => {
+            const compactedParts = compactCompletedHizbsToJuz(orderedParts);
+            return compactedParts.map((part, index) => {
                 const lines = part.text.split('\n');
                 const rendered = lines.length === 2
                     ? `<span class="whitespace-nowrap">${escapeHTML(lines[0])} <span dir="ltr" class="text-slate-400">→</span> (${escapeHTML(lines[1])})</span>`
                     : `<span class="whitespace-nowrap">${escapeHTML(part.text)}</span>`;
-                return `<span class="new-review-part ${part.size === 16 ? 'new-review-completed-hizb' : ''}">${index > 0 ? '<span class="new-review-plus">+</span>' : ''}${rendered}</span>`;
+                return `<span class="new-review-part ${part.size >= 16 ? 'new-review-completed-hizb' : ''}">${index > 0 ? '<span class="new-review-plus">+</span>' : ''}${rendered}</span>`;
             }).join('');
         }
 
@@ -2990,7 +3025,7 @@ if (unitName === "نصف حزب") return `نصف حزب ${(index % 2) + 1} ح${M
                 ...parts.filter(part => part.size !== 16),
                 ...parts.filter(part => part.size === 16)
             ];
-            return orderedParts.map(part => part.text).join('\n+ ');
+            return compactCompletedHizbsToJuz(orderedParts).map(part => part.text).join('\n+ ');
         }
 
         // عرض HTML موحّد (بلا خلفية للحزب المكتمل) لنص تراكمي قد يكون فيه أجزاء مفصولة
@@ -2998,8 +3033,8 @@ if (unitName === "نصف حزب") return `نصف حزب ${(index % 2) + 1} ح${M
         function renderCumulativeTextHTML(text) {
             if (!text) return '';
             const parts = String(text).split('\n+ ').map(rawPart => {
-                const isCompletedHizb = /^ح\d+$/.test(rawPart.trim());
-                return { text: rawPart, size: isCompletedHizb ? 16 : 1 };
+                const completedUnit = rawPart.trim().match(/^([حج])\d+$/);
+                return { text: rawPart, size: completedUnit ? (completedUnit[1] === 'ج' ? 32 : 16) : 1 };
             });
             return renderHalfThumnPartsHTML(parts);
         }
@@ -6214,7 +6249,7 @@ else if (S.step === 8) {
 
                 if (isNewReviewEnabled()) {
                         h += `<td class="p-2 border-l border-slate-200 text-center align-top"><div class="font-bold text-amber-900 leading-normal">${r.newMem}</div>${r.newMem !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newMem')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newMem')}</button>` : ""}</td>
-                            <td class="p-2 text-center align-top"><div class="font-bold text-indigo-900 text-[11px] leading-relaxed whitespace-pre-line">${r.newReview}</div>${isTrackableCell(r, 'newReview') ? `<button onclick="toggleTrack(${r.day}, 'newReview')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newReview')}</button>` : ""}</td>`;
+                            <td class="p-2 text-center align-top"><div class="new-review-cell-text font-bold text-indigo-900 text-[11px] leading-relaxed whitespace-pre-line">${r.newReview}</div>${isTrackableCell(r, 'newReview') ? `<button onclick="toggleTrack(${r.day}, 'newReview')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newReview')}</button>` : ""}</td>`;
                     }
                     tr.innerHTML = h;
                 }
