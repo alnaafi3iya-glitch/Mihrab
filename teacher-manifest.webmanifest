@@ -1,0 +1,28 @@
+{
+  "id": "./mihrab-teacher",
+  "name": "محراب المعلمة",
+  "short_name": "محراب المعلمة",
+  "description": "برنامج محراب للمعلمة لإدارة ومتابعة الحفظ القرآني",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./mihrab_final.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#145B52",
+  "theme_color": "#145B52",
+  "icons": [
+    {
+      "src": "./mihrab-teacher-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./mihrab-teacher-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
