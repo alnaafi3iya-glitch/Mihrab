@@ -6338,6 +6338,29 @@ card.appendChild(actionsRow);
        // window.onload = function() { loadSavedState(); render(); };
         // النسخة المستقلة لا تحتاج إلى Service Worker أو ملفات مرافقة.
         function applyUpdate() {}
+
+        // === إصلاح مطلوب صراحة (2026-09-11): عند فتح التطبيق كتطبيق مستقل من
+        // الشاشة الرئيسية على iOS تحديداً، هناك خلل معروف في WebKit حيث لا يُعاد
+        // حساب أبعاد الصفحة تلقائياً بعد تدوير الجهاز (رغم أن قفل الدوران في
+        // الجهاز نفسه معطَّل ودوران الجهاز يعمل بصرياً). التبويب العادي في
+        // المتصفح لا يتأثر بهذا لأن نافذة المتصفح تُعيد الحساب من تلقاء نفسها.
+        // الحل المعتاد وغير الضار: "نكز" وسم viewport فور استلام حدث الدوران
+        // لإجبار الصفحة على إعادة حساب تخطيطها، دون تغيير أي حالة أو بيانات.
+        (function fixStandaloneOrientationReflow() {
+            const viewportMeta = document.querySelector('meta[name="viewport"]');
+            if (!viewportMeta) return;
+            const originalContent = viewportMeta.getAttribute('content');
+            function nudgeReflow() {
+                viewportMeta.setAttribute('content', originalContent + ',viewport-fit=cover');
+                requestAnimationFrame(() => {
+                    viewportMeta.setAttribute('content', originalContent);
+                });
+            }
+            window.addEventListener('orientationchange', () => setTimeout(nudgeReflow, 250));
+            if (window.matchMedia) {
+                window.matchMedia('(orientation: portrait)').addEventListener('change', () => setTimeout(nudgeReflow, 250));
+            }
+        })();
     
 </script>
 
