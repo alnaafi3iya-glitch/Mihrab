@@ -7190,7 +7190,7 @@ window.openStudentLeaderboard = async function({ join = false } = {}) {
         if (join) localStorage.setItem('qp_leaderboard_joined', '1');
         localStorage.setItem('qp_leaderboard_student_name', studentName);
         pushToLeaderboard();
-        const destination = `https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?student=${encodeURIComponent(studentName)}`;
+        const destination = `https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?mode=student&student=${encodeURIComponent(studentName)}`;
         if (targetWindow) targetWindow.location.href = destination;
         else window.open(destination, '_blank');
         if (join) {
