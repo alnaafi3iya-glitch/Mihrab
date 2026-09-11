@@ -198,6 +198,7 @@
         const entryParams = new URLSearchParams(window.location.search);
         const requestedStudentName = cleanString(entryParams.get('student') || "");
         const isDirectStudentEntry = entryParams.get('mode') === 'student' && !!requestedStudentName;
+        const studentReturnMode = entryParams.get('return') || '';
         const requestedPreviewGroup = cleanString(entryParams.get('previewGroup') || "");
 
         // الدخول القادم من برنامج الطالبة له الأولوية على أي جلسة إدارة أو حلقة
@@ -702,6 +703,23 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
 
             if (isDirectStudentEntry) {
                 // في نسخة الطالبة لا يوجد خروج من الحلبة؛ يوجد رجوع إلى البرنامج فقط.
+                // النسخة الحديثة تفتح الحلبة في الصفحة نفسها، فيعيد الرجوع البرنامج
+                // ذاته كما كان، ولو وُجد برنامج آخر محفوظ في الموقع.
+                if (studentReturnMode === 'history' && window.history.length > 1) {
+                    window.history.back();
+                    return;
+                }
+
+                // توافق مع نسخ أقدم كانت تفتح الحلبة في تبويب مستقل.
+                if (window.opener && !window.opener.closed) {
+                    try {
+                        window.opener.focus();
+                        window.close();
+                        return;
+                    } catch (e) {}
+                }
+
+                // مسار احتياطي فقط للدخول المباشر بلا صفحة سابقة.
                 const studentProgramUrl = new URL(
                     './mihrab_alnaafi3iya_student.html?from=leaderboard',
                     window.location.href

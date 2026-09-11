@@ -6165,7 +6165,10 @@ else if (S.step === 8) {
                     localStorage.setItem('qps_leaderboard_student_name', studentName);
                     const groupName = S.schoolGroupName || S.schoolTeacherName || '';
                     const groupParam = groupName ? `&group=${encodeURIComponent(groupName)}` : '';
-                    window.open(`https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?mode=student&student=${encodeURIComponent(studentName)}`, '_blank');
+                    // تفتح الحلبة في الصفحة نفسها حتى تعود الطالبة عبر سجل المتصفح
+                    // إلى نسخة البرنامج ذاتها، لا إلى آخر برنامج محفوظ على الموقع.
+                    const leaderboardUrl = `https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?mode=student&return=history&student=${encodeURIComponent(studentName)}`;
+                    window.location.assign(leaderboardUrl);
                 };
                 area.appendChild(btnOpen);
             })();
