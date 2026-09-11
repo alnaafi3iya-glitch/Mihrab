@@ -181,6 +181,23 @@
 .dark [class~="text-emerald-800"] {
     color: #6ee7b7 !important;
 }
+
+        .new-mem-half-card {
+            width: 100%; max-width: 150px; box-sizing: border-box;
+            margin-inline: auto; padding: 6px 5px; border: 0; border-radius: 10px;
+            background: linear-gradient(135deg, #fff8e7, #fffbf3); box-shadow: none;
+        }
+        .new-mem-half-amount { white-space: nowrap; }
+        .new-review-summary {
+            max-width: 190px; margin-inline: auto; color: #115e59;
+            font-size: 10.5px; font-weight: 800; line-height: 1.55;
+        }
+        .new-review-part { display: block; }
+        .new-review-plus { margin-inline-end: 2px; color: #b45309; font-weight: 900; }
+        .new-review-completed-hizb { color: #78350f; font-weight: 900; }
+        .dark .new-mem-half-card { background: #3b2a17; }
+        .dark .new-review-summary { color: #ccfbf1; }
+        .dark .new-review-completed-hizb { color: #fde68a; }
     </style>
     <script>window.SCHOOL_STUDENT_MODE = true;</script>
 </head>
@@ -2378,7 +2395,7 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
                 <tr>
                     <td style="padding:7px 6px;border:1px solid #cbd5e1;font-weight:700;text-align:center;">${r.day}</td>
                     <td style="padding:7px 6px;border:1px solid #cbd5e1;">${escapeHtml(r.mutqan || '—')} ${statusEmoji(r.statuses.mutqan)}</td>
-                    <td style="padding:7px 6px;border:1px solid #cbd5e1;">${escapeHtml(r.mutfalet || '—')} ${statusEmoji(r.statuses.mutfaletWard)}${r.mfCumulativeText ? '<br>' + escapeHtml(r.mfCumulativeText) + ' ' + statusEmoji(r.statuses.mutfaletCumul) : ''}</td>
+                    <td style="padding:7px 6px;border:1px solid #cbd5e1;">${escapeHtml(r.mutfalet || '—').replace(/\n/g, '<br>')} ${statusEmoji(r.statuses.mutfaletWard)}${r.mfCumulativeText ? '<br>' + escapeHtml(r.mfCumulativeText).replace(/\n/g, '<br>') + ' ' + statusEmoji(r.statuses.mutfaletCumul) : ''}</td>
                     <td style="padding:7px 6px;border:1px solid #cbd5e1;">${r.newMem && r.newMem !== '—' ? r.newMem : '—'} ${statusEmoji(r.statuses.newMem)}</td>
                     <td style="padding:7px 6px;border:1px solid #cbd5e1;">${r.newReview && r.newReview !== '—' ? r.newReview : '—'} ${r.newReviewInfoOnly ? '' : statusEmoji(r.statuses.newReview)}</td>
                 </tr>
@@ -2823,6 +2840,12 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
             return Math.max(0, maxUnits - 1);
         }
 
+        function formatTathbitRangeLabel(startPage, endPage, hizb) {
+            const startQ = (getEndingAbsIndexForPage(startPage, 'ربع') % 4) + 1;
+            const endQ = (getEndingAbsIndexForPage(endPage, 'ربع') % 4) + 1;
+            return startQ === endQ ? `ر${startQ} · ح${hizb}` : `من ر${startQ} إلى ر${endQ} · ح${hizb}`;
+        }
+
         function formatDiscreteUnit(index, unitName) {
             if (unitName === "ربع") return `ربع ${(index % 4) + 1} ح${Math.floor(index / 4) + 1}`;
             if (unitName === "ثمن") return `ثمن ${(index % 8) + 1} ح${Math.floor(index / 8) + 1}`;
@@ -2833,6 +2856,118 @@ if (unitName === "نصف حزب") return `نصف حزب ${(index % 2) + 1} ح${M
             if (unitName === "صفحة") return `ص ${index + 1}`;
             if (unitName === "نصف صفحة") return `ص ${Math.floor(index/2) + 1} ${index%2!==0?'(نصف 2)':'(نصف 1)'}`;
             return `${unitName} ${index + 1}`;
+        }
+
+        function getHalfThumnPosition(index) {
+            const positionInHizb = ((index % 16) + 16) % 16;
+            return {
+                hizb: Math.floor(index / 16) + 1,
+                quarter: Math.floor(positionInHizb / 4) + 1,
+                thumn: Math.floor((positionInHizb % 4) / 2) + 1,
+                half: (positionInHizb % 2) + 1
+            };
+        }
+
+        function formatHalfThumnTwoLines(index) {
+            const p = getHalfThumnPosition(index);
+            return `ر${p.quarter} · ح${p.hizb}\nالنصف ${p.half} · ثمن ${p.thumn}`;
+        }
+
+        function formatNewMemUnitHTML(index, unitName) {
+            if (unitName !== 'نصف ثمن') return formatDiscreteUnit(index, unitName);
+            const p = getHalfThumnPosition(index);
+            return `<div class="new-mem-half-card">
+                <div class="text-[10px] font-extrabold text-amber-700 dark:text-amber-300">ر${p.quarter} · ح${p.hizb}</div>
+                <div class="new-mem-half-amount mt-0.5 text-[11px] font-black leading-normal text-amber-900 dark:text-amber-100">النصف ${p.half} · ثمن ${p.thumn}</div>
+            </div>`;
+        }
+
+        function buildHalfThumnAccumulationParts(startIndex, endIndex) {
+            if (startIndex > endIndex) return [];
+            const parts = [];
+            let cursor = endIndex;
+            while (cursor >= startIndex) {
+                const hizbStart = Math.floor(cursor / 16) * 16;
+                const halfHizbStart = hizbStart + (cursor >= hizbStart + 8 ? 8 : 0);
+                const quarterStart = Math.floor(cursor / 4) * 4;
+                const p = getHalfThumnPosition(cursor);
+                if (cursor === hizbStart + 15 && startIndex <= hizbStart) {
+                    parts.push({ text: `ح${p.hizb}`, size: 16, hizb: p.hizb });
+                    cursor = hizbStart - 1; continue;
+                }
+                if (cursor === halfHizbStart + 7 && startIndex <= halfHizbStart) {
+                    const halfNumber = halfHizbStart === hizbStart ? 1 : 2;
+                    parts.push({ text: `نصف ${halfNumber} · ح${p.hizb}`, size: 8, hizb: p.hizb });
+                    cursor = halfHizbStart - 1; continue;
+                }
+                if (startIndex <= quarterStart) {
+                    const localEnd = cursor - quarterStart;
+                    let text;
+                    if (localEnd === 3) text = `ر${p.quarter} · ح${p.hizb}`;
+                    else if (localEnd === 1) text = `ر${p.quarter} · ح${p.hizb}\nث1`;
+                    else if (localEnd === 2) text = `ر${p.quarter} · ح${p.hizb}\nن1 · ث2`;
+                    else text = `ر${p.quarter} · ح${p.hizb}\nن1 · ث1`;
+                    parts.push({ text, size: localEnd + 1, hizb: p.hizb });
+                    cursor = quarterStart - 1; continue;
+                }
+                const thumnStart = cursor - (cursor % 2);
+                if (cursor % 2 === 1 && startIndex <= thumnStart) {
+                    parts.push({ text: `ر${p.quarter} · ح${p.hizb}\nث${p.thumn}`, size: 2, hizb: p.hizb });
+                    cursor = thumnStart - 1; continue;
+                }
+                parts.push({ text: `ر${p.quarter} · ح${p.hizb}\nن${p.half} · ث${p.thumn}`, size: 1, hizb: p.hizb });
+                cursor--;
+            }
+            return parts;
+        }
+
+        function renderHalfThumnPartsHTML(orderedParts) {
+            return orderedParts.map((part, index) => {
+                const lines = part.text.split('\n');
+                const rendered = lines.length === 2
+                    ? `<span class="whitespace-nowrap">${escapeHTML(lines[0])} <span dir="ltr" class="text-slate-400">→</span> (${escapeHTML(lines[1])})</span>`
+                    : `<span class="whitespace-nowrap">${escapeHTML(part.text)}</span>`;
+                return `<span class="new-review-part ${part.size === 16 ? 'new-review-completed-hizb' : ''}">${index > 0 ? '<span class="new-review-plus">+</span>' : ''}${rendered}</span>`;
+            }).join('');
+        }
+
+        function formatNewReviewRangeHTML(startIndex, endIndex, unitName) {
+            if (unitName !== 'نصف ثمن') return formatDiscreteRange(startIndex, endIndex, unitName);
+            if (startIndex > endIndex) return '—';
+            const parts = buildHalfThumnAccumulationParts(startIndex, endIndex);
+            const orderedParts = [...parts.filter(part => part.size !== 16), ...parts.filter(part => part.size === 16)];
+            return `<div class="new-review-summary">${renderHalfThumnPartsHTML(orderedParts)}</div>`;
+        }
+
+        function formatHalfThumnRangeText(startIndex, endIndex) {
+            if (startIndex > endIndex) return '—';
+            const parts = buildHalfThumnAccumulationParts(startIndex, endIndex);
+            const orderedParts = [...parts.filter(part => part.size !== 16), ...parts.filter(part => part.size === 16)];
+            return orderedParts.map(part => part.text).join('\n+ ');
+        }
+
+        function renderCumulativeTextHTML(text) {
+            if (!text) return '';
+            const parts = String(text).split('\n+ ').map(rawPart => ({
+                text: rawPart,
+                size: /^ح\d+$/.test(rawPart.trim()) ? 16 : 1
+            }));
+            return renderHalfThumnPartsHTML(parts);
+        }
+
+        function flattenMfCumulativeSegments(segments) {
+            const flat = [];
+            segments.forEach(seg => {
+                if (seg.type === 'hizb') {
+                    const hizbNum = String(seg.label).match(/\d+/);
+                    flat.push({ text: hizbNum ? `ح${hizbNum[0]}` : seg.label, size: 16 });
+                } else {
+                    String(seg.label).split('\n+ ').forEach(piece => {
+                        flat.push({ text: piece, size: /^ح\d+$/.test(piece.trim()) ? 16 : 1 });
+                    });
+                }
+            });
+            return flat;
         }
 
         function getSurahNameFromIndex(index, unitName) {
@@ -2961,7 +3096,7 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
                 }
 
                 const partialEnd = Math.min(endIndex, hizbEndIndex);
-                parts.push({ type: "partial", label: formatDiscreteRange(cursor, partialEnd, unitName) });
+                parts.push({ type: "partial", label: unitName === 'نصف ثمن' ? formatHalfThumnRangeText(cursor, partialEnd) : formatDiscreteRange(cursor, partialEnd, unitName) });
                 cursor = partialEnd + 1;
             }
             return parts;
@@ -3233,16 +3368,17 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
                 .map(range => ({
                     startPage: Math.max(1, range.startPage),
                     endPage: Math.min(604, range.endPage),
-                    reviewUnit: range.reviewUnitOverride || range.reviewUnit || defaultReviewUnit
+                    reviewUnit: range.reviewUnitOverride || range.reviewUnit || defaultReviewUnit,
+                    singleAtomicUnit: !!range.singleAtomicUnit
                 }))
                 .sort((a, b) => a.startPage - b.startPage || a.endPage - b.endPage)
                 .forEach(range => {
                     const last = normalized[normalized.length - 1];
-                    if (last && range.startPage <= last.endPage + 1 && range.reviewUnit === last.reviewUnit) {
+                    if (last && !last.singleAtomicUnit && !range.singleAtomicUnit && range.startPage <= last.endPage + 1 && range.reviewUnit === last.reviewUnit) {
                         last.endPage = Math.max(last.endPage, range.endPage);
                         return;
                     }
-                    const clippedStart = last && range.reviewUnit === last.reviewUnit && range.startPage <= last.endPage
+                    const clippedStart = last && !last.singleAtomicUnit && !range.singleAtomicUnit && range.reviewUnit === last.reviewUnit && range.startPage <= last.endPage
                         ? last.endPage + 1
                         : range.startPage;
                     if (clippedStart <= range.endPage) normalized.push({ ...range, startPage: clippedStart });
@@ -3252,7 +3388,7 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             normalized.forEach((range, rangeIndex) => {
                 // 240 هو أكبر عدد وحدات ممكن (الأرباع)، فينتج عن الدالة عنصر واحد
                 // لكل وحدة فعلية بلا تغيير حدود الأحزاب والسور والأجزاء المعتمدة.
-                distributeMutqan(range.startPage, range.endPage, 240, range.reviewUnit)
+                distributeMutqan(range.startPage, range.endPage, range.singleAtomicUnit ? 1 : 240, range.reviewUnit)
                     .filter(item => item?.label && item.label !== '—')
                     .forEach(item => atomicItems.push({
                         ...item,
@@ -3915,7 +4051,7 @@ if (!newHizbMfList.some(h => h.hizb === ch.hizb)) {
                 .map(ch => {
                     const realHizbStart = HIZB_START_PAGES[ch.hizb - 1];
                     if (ch.rangeStart !== realHizbStart) {
-                        return `<span class="text-amber-700 font-bold">تثبيت من ص${ch.rangeStart} إلى ص${ch.rangeEnd} (ح${ch.hizb}) 🔄</span>`;
+                        return `<span class="text-amber-700 font-bold">تثبيت ${formatTathbitRangeLabel(ch.rangeStart, ch.rangeEnd, ch.hizb)} 🔄</span>`;
                     }
                     return `<span class="text-amber-700 font-bold">تثبيت الحزب ${ch.hizb} 🔄</span>`;
                 })
@@ -4004,7 +4140,7 @@ const cumStartIndex = (() => {
                             newReviewInfoOnly = true;
                         } else {
                         const newMemSurah = getSurahNameFromIndex(newMemIndex, S.newDailyUnit);
-                        nMemText = `<div class="font-bold text-amber-900 leading-normal">${formatDiscreteUnit(newMemIndex, S.newDailyUnit)}</div>${newMemSurah ? `<div class="text-[9px] text-slate-400 mt-0.5">${newMemSurah}</div>` : ""}`;
+                        nMemText = `${S.newDailyUnit === 'نصف ثمن' ? formatNewMemUnitHTML(newMemIndex, S.newDailyUnit) : `<div class="font-bold text-amber-900 leading-normal">${formatDiscreteUnit(newMemIndex, S.newDailyUnit)}</div>`}${newMemSurah ? `<div class="text-[9px] text-slate-400 mt-0.5">${newMemSurah}</div>` : ""}`;
                         newMemIndexOfDay = newMemIndex;
                         const _curRealHizb = hizbNumFromUnitIndex(newMemIndex, S.newDailyUnit);
 newMemIndex++;
@@ -4037,12 +4173,12 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                             cumHTML = `<span class="text-[10.5px] text-teal-700 font-bold">بداية حفظ ✨</span>`;
                             newReviewInfoOnly = true;
                         }
-                        else if (cumStartIndex <= newMemIndex - 2) cumHTML = `<span class="text-[10.5px] text-slate-600 font-bold">${formatDiscreteRange(cumStartIndex, newMemIndex - 2, S.newDailyUnit)}</span>`;
+                        else if (cumStartIndex <= newMemIndex - 2) cumHTML = `<span class="text-[10.5px] text-slate-600 font-bold">${formatNewReviewRangeHTML(cumStartIndex, newMemIndex - 2, S.newDailyUnit)}</span>`;
                         nRevText = fixStr ? `${fixStr}${cumHTML ? `<hr class="my-1.5 border-emerald-100"/>${cumHTML}` : ''}` : (cumHTML || "—");
                         }
                     } else {
                         let cumHTML = "";
-                        if (newMemIndex > startNewMemIndex && cumStartIndex <= newMemIndex - 1) cumHTML = `<span class="text-[10.5px] text-slate-600 font-bold">${formatDiscreteRange(cumStartIndex, newMemIndex - 1, S.newDailyUnit)}</span>`;
+                        if (newMemIndex > startNewMemIndex && cumStartIndex <= newMemIndex - 1) cumHTML = `<span class="text-[10.5px] text-slate-600 font-bold">${formatNewReviewRangeHTML(cumStartIndex, newMemIndex - 1, S.newDailyUnit)}</span>`;
                         nRevText = fixStr ? `${fixStr}${cumHTML ? `<hr class="my-1.5 border-emerald-100"/>${cumHTML}` : ''}` : (cumHTML || "—");
                     }
 
@@ -4270,33 +4406,23 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                 });
             // الحد الأدنى للنقل هو حزب كامل مهما كانت وحدة عرض المتقن.
             const fullHizbDisjointReadyRanges = disjointReadyTransferredRanges
-                .flatMap(range =>
-                    range.source === 'terminal-partial'
-                        ? [{ ...range }]
-                        : getCompletedMutqanRangesWithin(
-                            range.startPage,
-                            range.endPage,
-                            "بالأحزاب"
-                        ).map(completedRange => ({
-                            ...completedRange,
-                            source: range.source
-                        }))
-                );
+                .flatMap(range => {
+                    if (range.source === 'terminal-partial') return [{ ...range }];
+                    const completed = getCompletedMutqanRangesWithin(range.startPage, range.endPage, "بالأحزاب");
+                    if (completed.length > 0) {
+                        return completed.map(completedRange => ({ ...completedRange, source: range.source }));
+                    }
+                    return [{ startPage: range.startPage, endPage: range.endPage, source: range.source, singleAtomicUnit: true }];
+                });
             // بعد اجتياز بوابة الحزب الكامل نعرضه بالوحدة المختارة إن اكتملت؛
             // وإلا نستخدم أكبر وحدة أصغر مكتملة، من دون إخفاء المحفوظ.
             const completedDisjointReadyTransferredRanges = fullHizbDisjointReadyRanges
-                .flatMap(range =>
-                    range.source === 'terminal-partial'
-                        ? [{ ...range, reviewUnitOverride: 'بالصفحات' }]
-                        : buildAdaptiveMutqanRanges(
-                            range.startPage,
-                            range.endPage,
-                            S.mutqanReviewUnit
-                        ).map(completedRange => ({
-                            ...completedRange,
-                            source: range.source
-                        }))
-                );
+                .flatMap(range => {
+                    if (range.source === 'terminal-partial') return [{ ...range, reviewUnitOverride: 'بالصفحات' }];
+                    if (range.singleAtomicUnit) return [{ ...range }];
+                    return buildAdaptiveMutqanRanges(range.startPage, range.endPage, S.mutqanReviewUnit)
+                        .map(completedRange => ({ ...completedRange, source: range.source }));
+                });
 
             // ندمج التغطية أولاً، ثم نستخرج وحدات المتقن المكتملة فقط.
             snappedEndThisWeek = Math.max(
@@ -4490,7 +4616,9 @@ let mfDailyText = "—", mfFinishedNote = null, mfDailySurah = null, mfAddedHizb
                 const mfCarryoverActive = Number.isInteger(_carryover) && _carryover > 0 && globalDay <= _carryover;
                 if (mfTimelineActiveToday && activeMfUnitIndex < totalBaseMfUnits) {
                     mfWardAbsIndex = startMfIndex + activeMfUnitIndex;
-                    mfDailyText = formatDiscreteUnit(mfWardAbsIndex, S.dailyUnit);
+                    mfDailyText = S.dailyUnit === 'نصف ثمن'
+                        ? formatHalfThumnTwoLines(mfWardAbsIndex)
+                        : formatDiscreteUnit(mfWardAbsIndex, S.dailyUnit);
                     mfDailySurah = getSurahNameFromIndex(mfWardAbsIndex, S.dailyUnit);
                 }
                 else if (mfTimelineActiveToday && totalBaseMfUnits > 0 && activeMfUnitIndex === totalBaseMfUnits) mfFinishedNote = "🎉 اكتمل المتفلت الأساسي!";
@@ -4554,12 +4682,15 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                             ? PROG.mfCumulativeInitialEndIndex
                             : startMfIndex - 1;
                         const mfCumulativeEnd = mfCumulativeInitialEnd + clampedIndexForCumul;
+                        const mutqanConsolidatedUpToIndex = (S.hasInitialMutqan !== false && snappedEndThisWeek > 0)
+                            ? getEndingAbsIndexForPage(snappedEndThisWeek, S.dailyUnit)
+                            : -1;
                         const mfCumStart = mfCumulativeEnd >= mfCumulativeBaseStart
                             ? (S.hasInitialMutqan === false
                                 // لا نافذة منزلقة: الحزب المكتمل يبقى كاملاً في المتفلت
                                 // ويُحذف دفعة واحدة فقط عندما ينتقل إلى المتقن.
                                 ? Math.max(mfCumulativeBaseStart, startMfIndex + noInitialTransferredMfUnits)
-                                : Math.max(mfCumulativeBaseStart, mfCumulativeEnd - uj + 1))
+                                : Math.max(mfCumulativeBaseStart, mfCumulativeEnd - uj + 1, mutqanConsolidatedUpToIndex + 1))
                             : mfCumulativeBaseStart;
                         const elapsedFinalReviewDays = mfBadgeDay !== null
                             ? countMfUnpausedReviewDays(mfBadgeDay, globalDay)
@@ -4590,7 +4721,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                     )
                                         ? (S.hasInitialMutqan === false
                                             ? formatMfCumulativeGrouped(mfCumStart, mfCumulativeEnd, S.dailyUnit)
-                                            : formatDiscreteRange(mfCumStart, mfCumulativeEnd, S.dailyUnit))
+                                            : (S.dailyUnit === 'نصف ثمن' ? formatHalfThumnRangeText(mfCumStart, mfCumulativeEnd) : formatDiscreteRange(mfCumStart, mfCumulativeEnd, S.dailyUnit)))
                                         : null
                                 )
                             );
@@ -5983,11 +6114,11 @@ else if (S.step === 8) {
                     const cellEmpty = !cellHasWard && !cellHasCumul && !cellHasNewHizb;
                     h += `<td class="p-2 border-l border-slate-200">` +
                         (cellEmpty ? `<div class="text-slate-400">—</div>` : "") +
-                        (cellHasWard ? `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletWard')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletWard')}</button><span class="font-bold text-teal-950 text-[12px] leading-normal px-1.5 py-0.5 rounded-md border border-teal-300" style="background:#ccfbf1;">${r.mutfalet}${r.mfSurahName ? ` <span class="font-normal text-[10px] text-teal-700">(${r.mfSurahName})</span>` : ""}</span></div>` : "") +
-                        (cellHasCumul ? `<div class="flex items-center gap-1.5 mt-1"><button onclick="toggleTrack(${r.day}, 'mutfaletCumul')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletCumul')}</button><span class="text-[9px] text-slate-500">📍 ${Array.isArray(r.mfCumulativeSegments) ? r.mfCumulativeSegments.map((part, index) => `${index ? '<span class=\"mx-0.5 text-slate-400\">+</span>' : ''}<span class=\"inline-block px-1.5 py-0.5 rounded-md border font-bold ${part.type === 'hizb' ? 'bg-violet-100 border-violet-300 text-violet-800' : 'bg-teal-100 border-teal-300 text-teal-800'}\">${part.label}</span>`).join('') : r.mfCumulativeText}</span></div>` : "") +
+                        (cellHasWard ? `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletWard')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletWard')}</button><span class="font-bold text-center whitespace-pre-line text-teal-950 text-[12px] leading-normal px-1.5 py-0.5 rounded-md border border-teal-300" style="background:#ccfbf1;">${r.mutfalet}${r.mfSurahName ? ` <span class="font-normal text-[10px] text-teal-700">(${r.mfSurahName})</span>` : ""}</span></div>` : "") +
+                        (cellHasCumul ? `<div class="flex items-center gap-1.5 mt-1"><button onclick="toggleTrack(${r.day}, 'mutfaletCumul')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletCumul')}</button><span class="text-[9px] text-slate-500">📍 ${Array.isArray(r.mfCumulativeSegments) ? renderHalfThumnPartsHTML(flattenMfCumulativeSegments(r.mfCumulativeSegments)) : renderCumulativeTextHTML(r.mfCumulativeText)}</span></div>` : "") +
                         (r.mfFinishedNote ? `<div class="text-[9px] text-emerald-700 font-bold mt-1">${r.mfFinishedNote}</div>` : "") +
                         (cellHasNewHizb ? `<hr class="my-1.5 border-slate-200"/>` +
-                            `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletNewHizb')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletNewHizb')}</button><span class="font-bold text-amber-700 text-[11px] leading-normal">${r.mfAddedIsCarryRange ? `من ص${r.mfAddedRange.start} إلى ص${r.mfAddedRange.end}` : `${r.mfAddedRange ? `من ص${r.mfAddedRange.start} إلى ص${r.mfAddedRange.end} ` : ""}الحزب ${r.mfAddedHizb}${r.mfAddedSurah ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfAddedSurah})</span>` : ""}`}</span></div>` : "") +
+                            `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletNewHizb')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletNewHizb')}</button><span class="font-bold text-amber-700 text-[11px] leading-normal">${r.mfAddedIsCarryRange ? `من ص${r.mfAddedRange.start} إلى ص${r.mfAddedRange.end}` : `الحزب ${r.mfAddedHizb}${r.mfAddedSurah ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfAddedSurah})</span>` : ""}`}</span></div>` : "") +
                         `</td>`;
                 }
 
@@ -6237,6 +6368,22 @@ card.appendChild(actionsRow);
        // window.onload = function() { loadSavedState(); render(); };
         // النسخة المستقلة لا تحتاج إلى Service Worker أو ملفات مرافقة.
         function applyUpdate() {}
+
+        (function fixStandaloneOrientationReflow() {
+            const viewportMeta = document.querySelector('meta[name="viewport"]');
+            if (!viewportMeta) return;
+            const originalContent = viewportMeta.getAttribute('content');
+            function nudgeReflow() {
+                viewportMeta.setAttribute('content', originalContent + ',viewport-fit=cover');
+                requestAnimationFrame(() => {
+                    viewportMeta.setAttribute('content', originalContent);
+                });
+            }
+            window.addEventListener('orientationchange', () => setTimeout(nudgeReflow, 250));
+            if (window.matchMedia) {
+                window.matchMedia('(orientation: portrait)').addEventListener('change', () => setTimeout(nudgeReflow, 250));
+            }
+        })();
     
 </script>
 
