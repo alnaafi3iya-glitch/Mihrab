@@ -554,6 +554,14 @@
                                 <textarea id="new-group-students" rows="5" oninput="updateNewGroupStudentsCount()" class="w-full p-3 bg-white border border-emerald-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500" placeholder="مريم أحمد&#10;فاطمة علي&#10;خديجة محمد"></textarea>
                                 <p id="new-group-students-count" class="text-[10px] text-emerald-700 mt-2">لم تُكتب أسماء بعد</p>
                             </div>
+                            <div id="edit-group-students-container" class="hidden mb-4 rounded-2xl bg-emerald-50 border border-emerald-200 p-4">
+                                <div class="flex flex-wrap items-center justify-between gap-2 mb-3"><h4 class="text-sm font-black text-emerald-900">طالبات الحلقة</h4><button type="button" onclick="cancelGroupEdit()" class="text-xs font-bold text-slate-600 bg-white border border-slate-200 px-3 py-2 rounded-lg">رجوع دون تعديل بيانات الحلقة</button></div>
+                                <div id="edit-group-students-list" class="space-y-2 mb-3"></div>
+                                <label for="edit-group-student-name" class="block text-xs font-bold text-emerald-900 mb-2">إضافة طالبة موجودة أو جديدة</label>
+                                <div class="flex flex-wrap gap-2"><input id="edit-group-student-name" type="text" list="edit-group-students-options" class="flex-1 min-w-44 p-3 bg-white border border-emerald-200 rounded-xl text-sm" placeholder="اسم الطالبة كاملاً"><datalist id="edit-group-students-options"></datalist><button type="button" onclick="addStudentToEditedGroup()" class="bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs">إضافة إلى الحلقة</button></div>
+                                <p class="text-[11px] text-emerald-800 mt-2">الإخراج يغيّر الحلقة فقط ولا يحذف البرنامج أو الإنجازات. يمكنك إعادة الطالبة بإدخال اسمها.</p>
+                                <button id="undo-group-student-btn" type="button" onclick="undoGroupStudentChange()" class="hidden mt-3 bg-white border border-amber-300 text-amber-800 font-bold px-4 py-2 rounded-xl text-xs">تراجع عن آخر تغيير للطالبات</button>
+                            </div>
                             <button id="group-submit-btn" onclick="saveGroup()" class="bg-emerald-700 text-white font-bold py-3 px-6 rounded-xl hover:bg-emerald-800 transition shadow-md text-sm flex items-center gap-2">
                                 <span id="group-submit-text">إنشاء المجموعة وحفظها</span> <i class="fa-solid fa-check"></i>
                             </button>
@@ -833,6 +841,7 @@
 
         // حالة التعديل على المجموعات
         let editingGroupId = null;
+        let lastGroupStudentChange = null;
 
         // قواعد البيانات المحلية (Cache)
         let leaderboardData = {};
@@ -1451,6 +1460,7 @@
             db.ref('dashboard_data/student_groups').on('value', snap => { 
                 studentGroupsMap = snap.val() || {}; 
                 updateUI(); 
+                if (editingGroupId) renderEditedGroupStudents();
             }, err => console.error("Firebase error reading student_groups:", err));
 
             db.ref('dashboard_data/student_notes').on('value', snap => {
@@ -1866,6 +1876,8 @@
                 ? 'حساب المعلمة مرتبط بهذه الحلقة بالفعل.'
                 : 'أدخلي كلمة مرور مؤقتة لإنشاء حساب الحلقة القديمة وربطه بها.';
             document.getElementById('new-group-students-container')?.classList.add('hidden');
+            document.getElementById('edit-group-students-container')?.classList.remove('hidden');
+            renderEditedGroupStudents();
 
             // تغيير نصوص وعناصر الواجهة لتوضح التعديل
             document.getElementById('group-form-title').innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-500"></i> تعديل بيانات حلقة: <span class="text-emerald-700 font-bold">"${group.name}"</span>`;
@@ -1888,6 +1900,82 @@
             submitBtn.disabled = false;
             document.getElementById('cancel-group-edit-btn').classList.add('hidden');
             document.getElementById('new-group-students-container')?.classList.remove('hidden');
+            document.getElementById('edit-group-students-container')?.classList.add('hidden');
+        }
+
+        function renderEditedGroupStudents() {
+            const list = document.getElementById('edit-group-students-list');
+            const options = document.getElementById('edit-group-students-options');
+            if (!list || !editingGroupId) return;
+            const members = Object.keys(studentGroupsMap || {}).filter(key => studentGroupsMap[key] === editingGroupId);
+            list.innerHTML = members.length ? members.map(key => `<div class="flex items-center justify-between gap-2 bg-white rounded-xl border border-emerald-100 p-2"><span class="text-sm text-slate-700">${escapeHtml(leaderboardData[key]?.name || key)}</span><button type="button" data-student-key="${escapeHtml(key)}" onclick="removeStudentFromEditedGroup(this.dataset.studentKey)" class="text-rose-700 border border-rose-200 px-3 py-2 rounded-lg text-xs font-bold">إخراج</button></div>`).join('') : '<p class="text-xs text-slate-500">لا توجد طالبات في هذه الحلقة.</p>';
+            options.innerHTML = Object.keys(leaderboardData || {}).filter(key => studentGroupsMap[key] !== editingGroupId).map(key => `<option value="${escapeHtml(leaderboardData[key]?.name || key)}"></option>`).join('');
+            document.getElementById('undo-group-student-btn')?.classList.toggle('hidden', !lastGroupStudentChange || lastGroupStudentChange.groupId !== editingGroupId);
+        }
+
+        async function changeEditedStudentGroup(key, nextGroupId, message) {
+            if (!requireAdminAction() || !editingGroupId || !groupsData[editingGroupId]) return;
+            if (!confirm(message)) return;
+            const previousGroupId = studentGroupsMap[key] || 'GENERAL';
+            try {
+                await db.ref('dashboard_data/student_groups/' + key).set(nextGroupId);
+                studentGroupsMap[key] = nextGroupId;
+                lastGroupStudentChange = { key, previousGroupId, nextGroupId, groupId: editingGroupId };
+                renderEditedGroupStudents();
+            } catch (error) {
+                console.error(error);
+                alert('تعذر تغيير حلقة الطالبة. تحققي من الاتصال وأعيدي المحاولة.');
+            }
+        }
+
+        async function addStudentToEditedGroup() {
+            if (!requireAdminAction() || !editingGroupId) return;
+            const input = document.getElementById('edit-group-student-name');
+            const name = input.value.trim();
+            if (!name) { alert('يرجى إدخال اسم الطالبة.'); return; }
+            const key = name.replace(/[.#$[\]/\x00-\x1F\x7F]/g, '_');
+            const existing = leaderboardData[key];
+            if (existing && existing.name && existing.name !== name) { alert('يوجد سجل باسم مشابه؛ تحققي من اسم الطالبة قبل الإضافة.'); return; }
+            if (studentGroupsMap[key] === editingGroupId) { alert('الطالبة موجودة بالفعل في هذه الحلقة.'); return; }
+            const previous = studentGroupsMap[key] || 'GENERAL';
+            const oldName = groupsData[previous]?.name || 'الحلبة العامة';
+            if (!confirm(`هل تؤكدين إضافة «${name}» إلى حلقة «${groupsData[editingGroupId].name}»؟${existing && previous !== 'GENERAL' ? `\nستنقل من «${oldName}» دون حذف إنجازاتها.` : ''}`)) return;
+            try {
+                const updates = { ['dashboard_data/student_groups/' + key]: editingGroupId };
+                if (!existing) updates['leaderboard/' + key] = { name, week:1, weekPct:0, mutqanPct:0, mutfaletPct:0, newPct:0, lastUpdate:Date.now() };
+                await db.ref().update(updates);
+                studentGroupsMap[key] = editingGroupId;
+                if (!existing) leaderboardData[key] = updates['leaderboard/' + key];
+                lastGroupStudentChange = { key, previousGroupId: previous, nextGroupId: editingGroupId, groupId: editingGroupId };
+                input.value = '';
+                renderEditedGroupStudents();
+            } catch (error) {
+                console.error(error);
+                alert('تعذرت إضافة الطالبة. تحققي من الاتصال وأعيدي المحاولة.');
+            }
+        }
+
+        function removeStudentFromEditedGroup(key) {
+            if (!editingGroupId || studentGroupsMap[key] !== editingGroupId) return;
+            return changeEditedStudentGroup(key, 'GENERAL', `هل تؤكدين إخراج «${leaderboardData[key]?.name || key}» من الحلقة؟\nسيبقى برنامجها وإنجازها محفوظين، ويمكن إعادتها لاحقًا.`);
+        }
+
+        async function undoGroupStudentChange() {
+            if (!requireAdminAction()) return;
+            const change = lastGroupStudentChange;
+            if (!change || change.groupId !== editingGroupId) return;
+            if (!confirm('هل تؤكدين التراجع عن آخر تغيير وإعادة الطالبة إلى وضعها السابق؟')) return;
+            try {
+                const current = (await db.ref('dashboard_data/student_groups/' + change.key).once('value')).val() || 'GENERAL';
+                if (current !== change.nextGroupId) { alert('تغيرت حلقة الطالبة بعد آخر عملية؛ أعيدي مراجعة بياناتها قبل التراجع.'); lastGroupStudentChange = null; renderEditedGroupStudents(); return; }
+                await db.ref('dashboard_data/student_groups/' + change.key).set(change.previousGroupId);
+                studentGroupsMap[change.key] = change.previousGroupId;
+                lastGroupStudentChange = null;
+                renderEditedGroupStudents();
+            } catch (error) {
+                console.error(error);
+                alert('تعذر التراجع. تحققي من الاتصال وأعيدي المحاولة.');
+            }
         }
 
         function clearGroupInputs() {
