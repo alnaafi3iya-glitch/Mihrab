@@ -200,6 +200,7 @@
         const isDirectStudentEntry = entryParams.get('mode') === 'student' && !!requestedStudentName;
         const studentReturnMode = entryParams.get('return') || '';
         const requestedPreviewGroup = cleanString(entryParams.get('previewGroup') || "");
+        const isDirectGroupPreview = entryParams.get('mode') === 'preview' && !!requestedPreviewGroup;
 
         // الدخول القادم من برنامج الطالبة له الأولوية على أي جلسة إدارة أو حلقة
         // قديمة محفوظة في هذا المتصفح.
@@ -223,9 +224,19 @@
             }
         }
 
+        // معاينة الحلقة المختارة فقط، دون تشغيل وضع الإدارة أو تغيير اختيار الحلبة المحفوظ.
+        if (isDirectGroupPreview) {
+            document.getElementById('admin-entry-btn')?.classList.add('hidden');
+            document.getElementById('admin-scope-toolbar')?.classList.add('hidden');
+            const returnLabel = document.getElementById('group-exit-label');
+            const returnIcon = document.getElementById('group-exit-icon');
+            if (returnLabel) returnLabel.textContent = 'عودة للوحة';
+            if (returnIcon) returnIcon.className = 'fa-solid fa-arrow-right';
+        }
+
         let savedGroupId = isDirectStudentEntry
             ? ''
-            : (localStorage.getItem('qp_leaderboard_group_id') || "");
+            : (isDirectGroupPreview ? requestedPreviewGroup : (localStorage.getItem('qp_leaderboard_group_id') || ""));
         let directGroupResolutionPending = isDirectStudentEntry;
         let directGroupsLoaded = false;
         let directAssignmentsLoaded = false;
@@ -701,6 +712,18 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
         window.exitGroup = function() {
             if (isAdminMode) return exitAdminMode();
 
+            if (isDirectGroupPreview) {
+                if (window.opener && !window.opener.closed) {
+                    try {
+                        window.opener.focus();
+                        window.close();
+                        return;
+                    } catch (e) {}
+                }
+                if (window.history.length > 1) window.history.back();
+                return;
+            }
+
             if (isDirectStudentEntry) {
                 // في نسخة الطالبة لا يوجد خروج من الحلبة؛ يوجد رجوع إلى البرنامج فقط.
                 // النسخة الحديثة تفتح الحلبة في الصفحة نفسها، فيعيد الرجوع البرنامج
@@ -812,7 +835,7 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
         };
 
         async function restoreAdminSession() {
-            if (isDirectStudentEntry) return;
+            if (isDirectStudentEntry || isDirectGroupPreview) return;
             const wantsAdmin = entryParams.get('admin') === '1' || sessionStorage.getItem('qp_leaderboard_admin_mode') === '1';
             if (!wantsAdmin) return;
             if (!auth.currentUser || auth.currentUser.isAnonymous) { window.openAdminLogin(); return; }

@@ -1558,7 +1558,7 @@
                 document.getElementById('th-group-column').innerText = 'تاريخ آخر نشاط';
 
                 menu.innerHTML += `<button id="btn-view-teacher-home" onclick="switchTab('view-teacher-home', 'الرئيسية')" class="${btnClass} ${activeClass}"><i class="fa-solid fa-house w-5 text-center"></i> الرئيسية</button>`;
-                if (!isImpersonating) menu.innerHTML += `<a href="https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?admin=1&previewGroup=${encodeURIComponent(currentGroupId || '')}" target="_blank" rel="noopener" class="${btnClass}"><i class="fa-solid fa-bolt w-5 text-center"></i> الحلبة مباشر</a>`;
+                if (!isImpersonating) menu.innerHTML += `<a href="https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?mode=preview&previewGroup=${encodeURIComponent(currentGroupId || '')}" target="_blank" rel="noopener" class="${btnClass}"><i class="fa-solid fa-bolt w-5 text-center"></i> الحلبة مباشر</a>`;
                 menu.innerHTML += `<button id="btn-view-students" onclick="switchTab('view-students', 'طالباتي')" class="${btnClass}"><i class="fa-solid fa-book-open w-5 text-center"></i> متابعة طالبات الحلقة</button>`;
                 menu.innerHTML += `<button id="btn-view-exams" onclick="openExamCenter()" class="${btnClass}"><i class="fa-solid fa-medal w-5 text-center"></i> الاختبارات <span id="sidebar-exam-due-count" class="mr-auto hidden bg-rose-500 text-white min-w-6 h-6 px-1 rounded-full text-[10px] items-center justify-center">0</span></button>`;
                 menu.innerHTML += `<button id="btn-view-admin-reports" onclick="openTeacherReports()" class="${btnClass}"><i class="fa-solid fa-chart-column w-5 text-center"></i> تقرير الحلقة</button>`;
@@ -1574,7 +1574,7 @@
         // === الحلبة مباشر: معاينة نظيفة كطالبة، بلا كتابة أي بيانات ===
         function openDirectArenaList() {
             const container = document.getElementById('direct-arena-list');
-            const base = 'https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?admin=1&previewGroup=';
+            const base = 'https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?mode=preview&previewGroup=';
             const rowClass = 'flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 transition';
             let rows = `<a href="${base}GENERAL" target="_blank" rel="noopener" class="${rowClass}">
                 <span class="font-bold text-slate-800"><i class="fa-solid fa-globe text-emerald-600 ml-2"></i>الحلبة العامة</span>
