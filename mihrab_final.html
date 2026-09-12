@@ -132,9 +132,11 @@
             word-break: normal;
             white-space: normal;
         }
-        @media (max-width: 640px) {
-            .mutafalit-cumulative-text .whitespace-nowrap { white-space: normal; }
-        }
+        /* === تصحيح MIH-003 (طلب صريح من بسمة): كسر النص التراكمي للمتفلت دائمًا، لا
+           للهاتف فقط — هذا النص يكبر تراكميًا مع تقدم الأسبوع ويفيض خارج العمود
+           على الحاسوب أيضًا إن بقي بلا كسر. لا يمس أي عرض آخر يستخدم whitespace-nowrap
+           (كمراجعة الجديد)، لأنه محصور بالكلاس الحاوي .mutafalit-cumulative-text فقط. */
+        .mutafalit-cumulative-text .whitespace-nowrap { white-space: normal; }
         .new-review-plus {
             margin-inline-end: 2px;
             color: #b45309;
@@ -2757,9 +2759,21 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
                     // يُغلق الإيقاف الآن فقط، بعد تأكيد ناجح لخطوة النطاق (٦) — لا قبل ذلك أبداً، حتى لا
                     // تدخل الحالة "غير متوقف لكن بلا نطاق مُعتمد" (نقطة أمانة صريحة من الخبير الثاني).
                     if (S.step === 6 && S._mfResumingWithNewRange) {
+                        // === تصحيح MIH-001 (اكتشاف عبر ملاحظة بسمة الفعلية على حالة نفيسة) ===
+                        // كان "الآن" يُعاد حسابه هنا من PROG.week (الأسبوع المعروض على الشاشة لحظة
+                        // التأكيد في خطوة النطاق)، لا من لحظة الإيقاف الفعلية. إن تصفّحت المعلمة أسبوعاً
+                        // آخر بين الضغط على "إيقاف" والضغط على "تأكيد" هنا، يُسجَّل epoch خاطئ يحجب
+                        // ظهور المتفلت الجديد حتى ذلك الأسبوع اللاحق خطأً. الإصلاح: نعتمد يوم التوقف
+                        // الفعلي المسجَّل مسبقاً في الفترة المفتوحة من PROG.mfPauseHistory (يوم الضغط
+                        // على "إيقاف" نفسه)، لا يوم التأكيد. نُبقي الحساب القديم بديلاً احتياطياً فقط
+                        // إن تعذّر إيجاد فترة إيقاف مفتوحة (توافق رجعي مع أي حالة لم تمرّ بمسار الإيقاف).
+                        const openPausePeriod = (PROG.mfPauseHistory || [])
+                            .find(p => p.resumedAtGlobalDay === null || p.resumedAtGlobalDay === undefined);
                         // -1 لأن countEligibleMfUnitsInRange تعامل mfEpochGlobalDay كحد شامل للأيام
-                        // "المتخطّاة" — يجب أن يبدأ النطاق الجديد فعلياً من نفس هذا اليوم (الآن)، لا بعده.
-                        const nowDay = getCurrentGlobalDayForPauseControl();
+                        // "المتخطّاة" — يجب أن يبدأ النطاق الجديد فعلياً من نفس يوم التوقف، لا بعده.
+                        const nowDay = Number.isInteger(openPausePeriod?.pausedAtGlobalDay)
+                            ? openPausePeriod.pausedAtGlobalDay
+                            : getCurrentGlobalDayForPauseControl();
                         PROG.mfEpochGlobalDay = nowDay - 1;
                         PROG.mfPauseHistory = [];
                         PROG.mfPaused = false;
@@ -3021,13 +3035,27 @@ if (unitName === "نصف حزب") return `نصف حزب ${(index % 2) + 1} ح${M
         // في عرض "مراجعة الجديد". تنسيق عرض فقط لنفس النطاق (startIndex..endIndex)
         // الذي كان يُعرض سابقاً بواسطة formatDiscreteRange دون أي تغيير في القيم.
         function formatNewReviewRangeHTML(startIndex, endIndex, unitName) {
-            if (unitName !== 'نصف ثمن') return formatDiscreteRange(startIndex, endIndex, unitName);
             if (startIndex > endIndex) return '—';
-            const parts = buildHalfThumnAccumulationParts(startIndex, endIndex);
-            const orderedParts = [
-                ...parts.filter(part => part.size !== 16),
-                ...parts.filter(part => part.size === 16)
-            ];
+            if (unitName === 'نصف ثمن') {
+                const parts = buildHalfThumnAccumulationParts(startIndex, endIndex);
+                const orderedParts = [
+                    ...parts.filter(part => part.size !== 16),
+                    ...parts.filter(part => part.size === 16)
+                ];
+                return `<div class="new-review-summary">${renderHalfThumnPartsHTML(orderedParts)}</div>`;
+            }
+            // === تصحيح MIH-006 (طلب صريح من بسمة): نفس خوارزمية التراكم الجشعة المطبقة على
+            // المتفلت التراكمي (MIH-005) تُطبَّق هنا أيضاً على مراجعة الجديد. كانت هذه الوحدات
+            // (غير نصف ثمن) تتراجع مباشرة لـformatDiscreteRange (سرد حرفي بلا أي تجميع) — لم
+            // يظهر هذا في بيانات نفيسة لأن newDailyUnit لديها "نصف ثمن" أصلاً، لكنه ينطبق على
+            // أي طالبة تستعمل وحدة حفظ جديد أخرى (ثمن، ربع...). لا تعديل على buildGenericAccumulationParts
+            // نفسها (المعرَّفة أعلاه لأجل المتفلت) — يُعاد استخدامها هنا كما هي.
+            const unitsPerHizb = UNITS_PER_HIZB[unitName];
+            const rawParts = buildGenericAccumulationParts(startIndex, endIndex, unitName);
+            const orderedParts = Number.isInteger(unitsPerHizb) ? [
+                ...rawParts.filter(part => part.size !== unitsPerHizb),
+                ...rawParts.filter(part => part.size === unitsPerHizb)
+            ] : rawParts;
             return `<div class="new-review-summary">${renderHalfThumnPartsHTML(orderedParts)}</div>`;
         }
 
@@ -3094,6 +3122,67 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             let surahIndex = 0;
             for (let i = 0; i < SURAH_PAGE.length; i++) { if (SURAH_PAGE[i] <= page) surahIndex = i; else break; }
             return SURAHS[surahIndex];
+        }
+
+        // === تصحيح MIH-005 (توضيح دقيق من بسمة): تفكيك جشِع كامل، لا فحص نصف حزب فقط ===
+        // نمشي من نهاية النطاق للبداية، ونطابق في كل خطوة أكبر وحدة ممكنة تبدأ من حد صحيح
+        // (حزب كامل ← نصف حزب ← ربع حزب ← الوحدة الأساسية نفسها)، مطابقةً تماماً لمنطق
+        // buildHalfThumnAccumulationParts الأصلي (الخاص بنصف الثمن فقط) لكن مُعمَّماً على أي
+        // وحدة قياس عبر UNITS_PER_HIZB. مثال (وحدة ثمن، 8/حزب): ثمنان=ربع، 4=نصف حزب،
+        // 5=نصف حزب+ثمن، 6=نصف حزب+ربع. لا تعديل على formatDiscreteRange نفسها، ولا على
+        // buildHalfThumnAccumulationParts (نصف الثمن يبقى بمساره الأصلي المستقل).
+        function buildGenericAccumulationParts(startIndex, endIndex, unitName) {
+            const unitsPerHizb = UNITS_PER_HIZB[unitName];
+            if (!Number.isInteger(unitsPerHizb) || unitsPerHizb < 2) {
+                return [{ text: formatDiscreteRange(startIndex, endIndex, unitName), size: 1 }];
+            }
+            const half = unitsPerHizb % 2 === 0 ? unitsPerHizb / 2 : null;
+            const quarter = unitsPerHizb % 4 === 0 ? unitsPerHizb / 4 : null;
+            const parts = [];
+            let cursor = endIndex;
+            while (cursor >= startIndex) {
+                const hizbStart = Math.floor(cursor / unitsPerHizb) * unitsPerHizb;
+                const hizbNum = Math.floor(cursor / unitsPerHizb) + 1;
+
+                if (cursor === hizbStart + unitsPerHizb - 1 && startIndex <= hizbStart) {
+                    parts.push({ text: `ح${hizbNum}`, size: unitsPerHizb, hizb: hizbNum });
+                    cursor = hizbStart - 1;
+                    continue;
+                }
+                if (half) {
+                    const halfStart = hizbStart + (cursor >= hizbStart + half ? half : 0);
+                    if (cursor === halfStart + half - 1 && startIndex <= halfStart) {
+                        const halfNumber = halfStart === hizbStart ? 1 : 2;
+                        parts.push({ text: `نصف ${halfNumber} · ح${hizbNum}`, size: half, hizb: hizbNum });
+                        cursor = halfStart - 1;
+                        continue;
+                    }
+                }
+                if (quarter) {
+                    const quarterIdx = Math.floor((cursor - hizbStart) / quarter);
+                    const quarterStart = hizbStart + quarterIdx * quarter;
+                    if (cursor === quarterStart + quarter - 1 && startIndex <= quarterStart) {
+                        parts.push({ text: `ربع ${quarterIdx + 1} · ح${hizbNum}`, size: quarter, hizb: hizbNum });
+                        cursor = quarterStart - 1;
+                        continue;
+                    }
+                }
+                parts.push({ text: formatDiscreteUnit(cursor, unitName), size: 1, hizb: hizbNum });
+                cursor -= 1;
+            }
+            return parts;
+        }
+
+        function formatCumulativeRangeCompact(startIndex, endIndex, unitName) {
+            if (unitName === 'نصف ثمن') return formatHalfThumnRangeText(startIndex, endIndex);
+            if (startIndex > endIndex) return '—';
+            const unitsPerHizb = UNITS_PER_HIZB[unitName];
+            const parts = buildGenericAccumulationParts(startIndex, endIndex, unitName);
+            const orderedParts = Number.isInteger(unitsPerHizb) ? [
+                ...parts.filter(part => part.size !== unitsPerHizb),
+                ...parts.filter(part => part.size === unitsPerHizb)
+            ] : parts;
+            return orderedParts.map(part => part.text).join('\n+ ');
         }
 
         function formatDiscreteRange(startIndex, endIndex, unitName) {
@@ -4005,7 +4094,12 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             let processedMfUnits = 0;
             const hasInheritedMutqanBaseline = Number.isInteger(S._inheritedMutqanEndPage);
             // FINAL_REVIEW_DELAY_DAYS يُعرَّف هنا (لا بعد الحلقة) لاستخدامه لاحقاً في isFullyTransferred.
-            const FINAL_REVIEW_DELAY_DAYS = 6; // مدة تكرار آخر نطاق ترميم قبل انتقاله فعلياً للمتقن
+            // === تصحيح MIH-002 (طلب صريح من بسمة، 2026-09-12): توحيد قاعدة الدورتين ===
+            // كان النطاق الأساسي (mfFrom/mfTo) ينتقل فعلياً للمتقن بعد دورة واحدة فقط (6 أيام)،
+            // بخلاف حزب متخرِّج من الحفظ الجديد الذي يأخذ دورتين (activeDays*2) في newHizbMfList.
+            // بسمة أكّدت أن القاعدة المقصودة دائماً: دورتان لأي حزب في المتفلت (أصلياً أو متخرجاً)
+            // قبل الانتقال فعلياً للمتقن واختفائه من المتفلت. توحيد الرقمين هنا يحقق ذلك.
+            const FINAL_REVIEW_DELAY_DAYS = activeDays * 2; // دورتان كاملتان قبل الانتقال الفعلي للمتقن
             // === دعم استمرار المراجعة التراكمية من مرحلة سابقة (لا تصفير) — تصحيح جوهري 2026-07-26 ===
             // S._mfCarryoverRemainingDays: عدد أيام المراجعة المتبقية فعلياً (١-٦) من ذيل حزب اكتمل ورده
             // في المرحلة السابقة. يُستخدم فقط لعرض نص مراجعة مستقل تماماً لأول globalDay أيام (أدناه)،
@@ -4874,7 +4968,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                     )
                                         ? (S.hasInitialMutqan === false
                                             ? formatMfCumulativeGrouped(mfCumStart, mfCumulativeEnd, S.dailyUnit)
-                                            : (S.dailyUnit === 'نصف ثمن' ? formatHalfThumnRangeText(mfCumStart, mfCumulativeEnd) : formatDiscreteRange(mfCumStart, mfCumulativeEnd, S.dailyUnit)))
+                                            : formatCumulativeRangeCompact(mfCumStart, mfCumulativeEnd, S.dailyUnit))
                                         : null
                                 )
                             );
@@ -6256,7 +6350,7 @@ else if (S.step === 8) {
                     h += `<td class="p-2 border-l border-slate-200">` +
                         (cellEmpty ? `<div class="text-slate-400">—</div>` : "") +
                         (cellHasWard ? `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletWard')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletWard')}</button><span class="font-bold text-center whitespace-pre-line text-teal-950 text-[12px] leading-normal px-1.5 py-0.5 rounded-md border border-teal-300" style="background:#ccfbf1;">${r.mutfalet}${r.mfSurahName ? ` <span class="font-normal text-[10px] text-teal-700">(${r.mfSurahName})</span>` : ""}</span></div>` : "") +
-                        (cellHasCumul ? `<div class="mutafalit-cumulative-row flex gap-1.5 mt-1"><button onclick="toggleTrack(${r.day}, 'mutfaletCumul')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletCumul')}</button><span class="mutafalit-cumulative-text text-[9px] text-slate-500">📍 ${Array.isArray(r.mfCumulativeSegments) ? renderHalfThumnPartsHTML(flattenMfCumulativeSegments(r.mfCumulativeSegments)) : renderCumulativeTextHTML(r.mfCumulativeText)}</span></div>` : "") +
+                        (cellHasCumul ? `<div class="mutafalit-cumulative-row flex gap-1.5 mt-1"><button onclick="toggleTrack(${r.day}, 'mutfaletCumul')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletCumul')}</button><span class="mutafalit-cumulative-text text-[9.5px] font-bold text-slate-600">${Array.isArray(r.mfCumulativeSegments) ? renderHalfThumnPartsHTML(flattenMfCumulativeSegments(r.mfCumulativeSegments)) : renderCumulativeTextHTML(r.mfCumulativeText)}</span></div>` : "") +
                         (r.mfFinishedNote ? `<div class="text-[9px] text-emerald-700 font-bold mt-1">${r.mfFinishedNote}</div>` : "") +
                         (cellHasNewHizb ? `<hr class="my-1.5 border-slate-200"/>` +
                             `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletNewHizb')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletNewHizb')}</button><span class="font-bold text-amber-700 text-[11px] leading-normal">${r.mfAddedIsCarryRange ? `من ص${r.mfAddedRange.start} إلى ص${r.mfAddedRange.end}` : `الحزب ${r.mfAddedHizb}${r.mfAddedSurah ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfAddedSurah})</span>` : ""}`}</span></div>` : "") +
