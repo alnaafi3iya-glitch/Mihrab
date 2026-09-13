@@ -3078,12 +3078,15 @@ if (unitName === "نصف حزب") return `نصف حزب ${(index % 2) + 1} ح${M
             // يظهر هذا في بيانات نفيسة لأن newDailyUnit لديها "نصف ثمن" أصلاً، لكنه ينطبق على
             // أي طالبة تستعمل وحدة حفظ جديد أخرى (ثمن، ربع...). لا تعديل على buildGenericAccumulationParts
             // نفسها (المعرَّفة أدناه لأجل المتفلت) — يُعاد استخدامها هنا كما هي.
-            const unitsPerHizb = UNITS_PER_HIZB[unitName];
+            // === تصحيح MIH-007: الفلترة أدناه تعتمد على نص الجزء (نمط "ح{رقم}" حرفياً) لا
+            // على تساوي الحجم مع unitsPerHizb — لأن نطاقاً مدمجاً من وحدات أساسية متبقية
+            // (بعد تصحيح MIH-007) قد يتصادف طوله مع unitsPerHizb دون أن يكون حزباً كاملاً
+            // فعلياً (خصوصاً في الوحدات الصفحية التي استُثنيت من افتراض حدود الحزب).
             const rawParts = buildGenericAccumulationParts(startIndex, endIndex, unitName);
-            const orderedParts = Number.isInteger(unitsPerHizb) ? [
-                ...rawParts.filter(part => part.size !== unitsPerHizb),
-                ...rawParts.filter(part => part.size === unitsPerHizb)
-            ] : rawParts;
+            const orderedParts = [
+                ...rawParts.filter(part => !/^ح\d+$/.test(part.text)),
+                ...rawParts.filter(part => /^ح\d+$/.test(part.text))
+            ];
             return `<div class="new-review-summary">${renderHalfThumnPartsHTML(orderedParts)}</div>`;
         }
 
@@ -3147,21 +3150,39 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
         // وحدة قياس عبر UNITS_PER_HIZB. مثال (وحدة ثمن، 8/حزب): ثمنان=ربع، 4=نصف حزب،
         // 5=نصف حزب+ثمن، 6=نصف حزب+ربع. لا تعديل على formatDiscreteRange نفسها، ولا على
         // buildHalfThumnAccumulationParts (نصف الثمن يبقى بمساره الأصلي المستقل).
+        // === تصحيح MIH-005 (توضيح دقيق من بسمة): تفكيك جشِع كامل، لا فحص نصف حزب فقط ===
+        // نمشي من نهاية النطاق للبداية، ونطابق في كل خطوة أكبر وحدة ممكنة تبدأ من حد صحيح
+        // (حزب كامل ← نصف حزب ← ربع حزب ← الوحدة الأساسية نفسها)، مطابقةً تماماً لمنطق
+        // buildHalfThumnAccumulationParts الأصلي (الخاص بنصف الثمن فقط) لكن مُعمَّماً على أي
+        // وحدة قياس عبر UNITS_PER_HIZB. مثال (وحدة ثمن، 8/حزب): ثمنان=ربع، 4=نصف حزب،
+        // 5=نصف حزب+ثمن، 6=نصف حزب+ربع. لا تعديل على formatDiscreteRange نفسها، ولا على
+        // buildHalfThumnAccumulationParts (نصف الثمن يبقى بمساره الأصلي المستقل).
+        //
+        // === تصحيح MIH-007 (اكتشاف عبر ملاحظة بسمة على وحدة "نصف صفحة"): ===
+        // "صفحة" و"نصف صفحة" فهرستهما مبنية على رقم الصفحة الفعلي في المصحف (604 صفحة)،
+        // لا على تقسيم منتظم لكل حزب لعدد وحدات ثابت كما في الوحدات المعيارية (ربع/ثمن/
+        // نصف ثمن/نصف حزب). افتراض "حزب = فهرس ÷ UNITS_PER_HIZB" صحيح فقط للوحدات
+        // المعيارية؛ تطبيقه على الصفحات يُنتج حدود حزب وهمية لا تطابق الواقع، وقد يعرض
+        // رقم حزب خاطئاً لو تصادف تطابق حسابي عرضي. لذا تُستثنى الوحدات الصفحية هنا كلياً
+        // وتُعرض كنطاق "من-إلى" مدمج مباشرة عبر formatDiscreteRange (تُنتجه أصلاً بصيغة
+        // نظيفة). كذلك، أي وحدات أساسية متبقية غير محاذية لحد ربع/نصف (حتى في الوحدات
+        // المعيارية) تُدمَج الآن في نطاق واحد بدل تعدادها فردياً بعلامة "+" لكل وحدة.
+        const HIERARCHICAL_ACCUMULATION_UNITS = ['ربع', 'ثمن', 'نصف ثمن', 'نصف حزب'];
         function buildGenericAccumulationParts(startIndex, endIndex, unitName) {
             const unitsPerHizb = UNITS_PER_HIZB[unitName];
-            if (!Number.isInteger(unitsPerHizb) || unitsPerHizb < 2) {
+            if (!Number.isInteger(unitsPerHizb) || unitsPerHizb < 2 || !HIERARCHICAL_ACCUMULATION_UNITS.includes(unitName)) {
                 return [{ text: formatDiscreteRange(startIndex, endIndex, unitName), size: 1 }];
             }
             const half = unitsPerHizb % 2 === 0 ? unitsPerHizb / 2 : null;
             const quarter = unitsPerHizb % 4 === 0 ? unitsPerHizb / 4 : null;
-            const parts = [];
+            const rawParts = [];
             let cursor = endIndex;
             while (cursor >= startIndex) {
                 const hizbStart = Math.floor(cursor / unitsPerHizb) * unitsPerHizb;
                 const hizbNum = Math.floor(cursor / unitsPerHizb) + 1;
 
                 if (cursor === hizbStart + unitsPerHizb - 1 && startIndex <= hizbStart) {
-                    parts.push({ text: `ح${hizbNum}`, size: unitsPerHizb, hizb: hizbNum });
+                    rawParts.push({ text: `ح${hizbNum}`, size: unitsPerHizb, hizb: hizbNum });
                     cursor = hizbStart - 1;
                     continue;
                 }
@@ -3169,7 +3190,7 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
                     const halfStart = hizbStart + (cursor >= hizbStart + half ? half : 0);
                     if (cursor === halfStart + half - 1 && startIndex <= halfStart) {
                         const halfNumber = halfStart === hizbStart ? 1 : 2;
-                        parts.push({ text: `نصف ${halfNumber} · ح${hizbNum}`, size: half, hizb: hizbNum });
+                        rawParts.push({ text: `نصف ${halfNumber} · ح${hizbNum}`, size: half, hizb: hizbNum });
                         cursor = halfStart - 1;
                         continue;
                     }
@@ -3178,13 +3199,38 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
                     const quarterIdx = Math.floor((cursor - hizbStart) / quarter);
                     const quarterStart = hizbStart + quarterIdx * quarter;
                     if (cursor === quarterStart + quarter - 1 && startIndex <= quarterStart) {
-                        parts.push({ text: `ربع ${quarterIdx + 1} · ح${hizbNum}`, size: quarter, hizb: hizbNum });
+                        rawParts.push({ text: `ربع ${quarterIdx + 1} · ح${hizbNum}`, size: quarter, hizb: hizbNum });
                         cursor = quarterStart - 1;
                         continue;
                     }
                 }
-                parts.push({ text: formatDiscreteUnit(cursor, unitName), size: 1, hizb: hizbNum });
+                rawParts.push({ text: formatDiscreteUnit(cursor, unitName), size: 1, hizb: hizbNum, index: cursor });
                 cursor -= 1;
+            }
+            // دمج أي سلسلة متتالية من وحدات أساسية مفردة (size===1) في مدى واحد مدمج،
+            // بدل تعدادها فرداً فرداً بعلامة "+" لكل وحدة.
+            const parts = [];
+            let i = 0;
+            while (i < rawParts.length) {
+                if (rawParts[i].size === 1 && Number.isInteger(rawParts[i].index)) {
+                    let j = i;
+                    while (
+                        j + 1 < rawParts.length &&
+                        rawParts[j + 1].size === 1 &&
+                        Number.isInteger(rawParts[j + 1].index) &&
+                        rawParts[j + 1].index === rawParts[j].index - 1
+                    ) { j++; }
+                    if (j > i) {
+                        const rangeEnd = rawParts[i].index, rangeStart = rawParts[j].index;
+                        parts.push({ text: formatDiscreteRange(rangeStart, rangeEnd, unitName), size: rangeEnd - rangeStart + 1 });
+                    } else {
+                        parts.push(rawParts[i]);
+                    }
+                    i = j + 1;
+                } else {
+                    parts.push(rawParts[i]);
+                    i++;
+                }
             }
             return parts;
         }
@@ -3192,12 +3238,11 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
         function formatCumulativeRangeCompact(startIndex, endIndex, unitName) {
             if (unitName === 'نصف ثمن') return formatHalfThumnRangeText(startIndex, endIndex);
             if (startIndex > endIndex) return '—';
-            const unitsPerHizb = UNITS_PER_HIZB[unitName];
             const parts = buildGenericAccumulationParts(startIndex, endIndex, unitName);
-            const orderedParts = Number.isInteger(unitsPerHizb) ? [
-                ...parts.filter(part => part.size !== unitsPerHizb),
-                ...parts.filter(part => part.size === unitsPerHizb)
-            ] : parts;
+            const orderedParts = [
+                ...parts.filter(part => !/^ح\d+$/.test(part.text)),
+                ...parts.filter(part => /^ح\d+$/.test(part.text))
+            ];
             return orderedParts.map(part => part.text).join('\n+ ');
         }
 
