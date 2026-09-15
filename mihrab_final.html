@@ -6942,7 +6942,67 @@ card.appendChild(actionsRow);
 };
        // window.onload = function() { loadSavedState(); render(); };
         // النسخة المستقلة لا تحتاج إلى Service Worker أو ملفات مرافقة.
-        function applyUpdate() {}
+        let waitingServiceWorker = null;
+let updateReloadStarted = false;
+
+function showUpdateBar(worker) {
+    waitingServiceWorker = worker;
+
+    const updateBar = document.getElementById('update-bar');
+    if (updateBar) {
+        updateBar.style.display = 'block';
+    }
+}
+
+function applyUpdate() {
+    if (!waitingServiceWorker) return;
+
+    waitingServiceWorker.postMessage({
+        type: 'SKIP_WAITING'
+    });
+}
+
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', async () => {
+        try {
+            const registration = await navigator.serviceWorker.register('./sw.js');
+
+            if (registration.waiting && navigator.serviceWorker.controller) {
+                showUpdateBar(registration.waiting);
+            }
+
+            registration.addEventListener('updatefound', () => {
+                const installingWorker = registration.installing;
+                if (!installingWorker) return;
+
+                installingWorker.addEventListener('statechange', () => {
+                    if (
+                        installingWorker.state === 'installed' &&
+                        navigator.serviceWorker.controller
+                    ) {
+                        showUpdateBar(installingWorker);
+                    }
+                });
+            });
+
+            await registration.update();
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    registration.update().catch(console.warn);
+                }
+            });
+        } catch (error) {
+            console.warn('تعذر تسجيل عامل التحديث:', error);
+        }
+    });
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (updateReloadStarted) return;
+        updateReloadStarted = true;
+        window.location.reload();
+    });
+}
 
         // === إصلاح مطلوب صراحة (2026-09-11): عند فتح التطبيق كتطبيق مستقل من
         // الشاشة الرئيسية على iOS تحديداً، هناك خلل معروف في WebKit حيث لا يُعاد

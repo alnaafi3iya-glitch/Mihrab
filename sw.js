@@ -33,7 +33,6 @@ self.addEventListener('install', event => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE_NAME);
         await Promise.all(APP_FILES.map(url => cacheOne(cache, url)));
-        await self.skipWaiting();
     })());
 });
 
