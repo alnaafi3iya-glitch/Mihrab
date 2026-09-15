@@ -625,44 +625,180 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
         window._viewingLiveStudentData = false;
         window._teacherOwnTrackingBackup = null;
         window._teacherOwnStationsBackup = null;
+        window._teacherOwnWeekBackup = null;
         window._liveStudentDataInfo = null;
 
+        // مرجع المستمع المباشر الحالي؛ لمنع تكرار المستمعات.
+        window._liveStudentTrackingRef = null;
+        window._liveStudentTrackingCallback = null;
+
+        function stopLiveStudentTracking() {
+            if (
+                window._liveStudentTrackingRef &&
+                window._liveStudentTrackingCallback
+            ) {
+                window._liveStudentTrackingRef.off(
+                    'value',
+                    window._liveStudentTrackingCallback
+                );
+            }
+
+            window._liveStudentTrackingRef = null;
+            window._liveStudentTrackingCallback = null;
+        }
+
         function restoreTeacherOwnDataIfNeeded() {
+            // نوقف الاستماع عند الرجوع إلى التوزيع المخطط.
+            stopLiveStudentTracking();
+
             if (window._viewingLiveStudentData) {
                 TRACKING = window._teacherOwnTrackingBackup || TRACKING;
                 stations = window._teacherOwnStationsBackup || stations;
+
+                if (Number.isInteger(window._teacherOwnWeekBackup)) {
+                    PROG.week = window._teacherOwnWeekBackup;
+                }
+
                 window._viewingLiveStudentData = false;
             }
+
+            window._teacherOwnTrackingBackup = null;
+            window._teacherOwnStationsBackup = null;
+            window._teacherOwnWeekBackup = null;
             window._liveStudentDataInfo = null;
         }
 
         async function loadLiveStudentActualData() {
             const studentName = String(S?.programName || '').trim();
-            const fbRef = (typeof window !== 'undefined' && window._fbDb) ? window._fbDb : (typeof _fbDb !== 'undefined' ? _fbDb : undefined);
+
+            const fbRef =
+                (typeof window !== 'undefined' && window._fbDb)
+                    ? window._fbDb
+                    : (typeof _fbDb !== 'undefined' ? _fbDb : undefined);
+
             if (!studentName || typeof fbRef === 'undefined') {
-                window._liveStudentDataInfo = { found: false, reason: 'no-connection' };
+                window._liveStudentDataInfo = {
+                    found: false,
+                    reason: 'no-connection'
+                };
                 return;
             }
+
             const key = studentName.replace(/[.#$[\]]/g, '_');
+
             try {
-                const snapshot = await fbRef.ref('student_full_tracking/' + key).once('value');
-                const remote = snapshot.val();
-                if (!remote || !remote.TRACKING) {
-                    window._liveStudentDataInfo = { found: false, reason: 'no-data' };
-                    return;
+                // انتظار اكتمال المصادقة قبل فتح المستمع.
+                if (typeof _fbAuthReady !== 'undefined') {
+                    await _fbAuthReady;
                 }
-                if (!window._viewingLiveStudentData) {
-                    window._teacherOwnTrackingBackup = TRACKING;
-                    window._teacherOwnStationsBackup = stations;
-                }
-                TRACKING = remote.TRACKING || {};
-                if (Array.isArray(remote.stations)) stations = remote.stations;
-                if (Number.isInteger(remote.PROG && remote.PROG.week)) PROG.week = remote.PROG.week;
-                window._viewingLiveStudentData = true;
-                window._liveStudentDataInfo = { found: true, fetchedAt: remote.lastUpdate || null };
-            } catch (e) {
-                console.warn('تعذّر جلب بيانات الطالبة الحقيقية:', e);
-                window._liveStudentDataInfo = { found: false, reason: 'error' };
+
+                // إلغاء أي مستمع سابق قبل فتح مستمع جديد.
+                stopLiveStudentTracking();
+
+                const trackingRef = fbRef.ref(
+                    'student_full_tracking/' + key
+                );
+
+                window._liveStudentTrackingRef = trackingRef;
+
+                await new Promise(resolve => {
+                    let firstResponse = true;
+
+                    const handleSnapshot = snapshot => {
+                        const remote = snapshot.val();
+
+                        if (!remote || !remote.TRACKING) {
+                            window._liveStudentDataInfo = {
+                                found: false,
+                                reason: 'no-data'
+                            };
+
+                            // نبقي المستمع مفتوحًا؛ فقد ترسل الطالبة بيانات لاحقًا.
+                            render();
+
+                            if (firstResponse) {
+                                firstResponse = false;
+                                resolve();
+                            }
+
+                            return;
+                        }
+
+                        // حفظ بيانات المعلمة الأصلية مرة واحدة فقط.
+                        if (!window._viewingLiveStudentData) {
+                            window._teacherOwnTrackingBackup = TRACKING;
+                            window._teacherOwnStationsBackup = stations;
+                            window._teacherOwnWeekBackup = PROG.week;
+                        }
+
+                        TRACKING = remote.TRACKING || {};
+
+                        if (Array.isArray(remote.stations)) {
+                            stations = remote.stations;
+                        }
+
+                        if (
+                            Number.isInteger(
+                                remote.PROG && remote.PROG.week
+                            )
+                        ) {
+                            PROG.week = remote.PROG.week;
+                        }
+
+                        window._viewingLiveStudentData = true;
+                        window._liveStudentDataInfo = {
+                            found: true,
+                            fetchedAt: remote.lastUpdate || null
+                        };
+
+                        // تحديث واجهة المعلمة فور وصول إنجاز جديد.
+                        render();
+
+                        if (firstResponse) {
+                            firstResponse = false;
+                            resolve();
+                        }
+                    };
+
+                    const handleError = error => {
+                        console.warn(
+                            'تعذّر جلب بيانات الطالبة الحقيقية:',
+                            error
+                        );
+
+                        window._liveStudentDataInfo = {
+                            found: false,
+                            reason: 'error'
+                        };
+
+                        render();
+
+                        if (firstResponse) {
+                            firstResponse = false;
+                            resolve();
+                        }
+                    };
+
+                    window._liveStudentTrackingCallback = handleSnapshot;
+
+                    trackingRef.on(
+                        'value',
+                        handleSnapshot,
+                        handleError
+                    );
+                });
+            } catch (error) {
+                console.warn(
+                    'تعذّر تشغيل المزامنة المباشرة:',
+                    error
+                );
+
+                stopLiveStudentTracking();
+
+                window._liveStudentDataInfo = {
+                    found: false,
+                    reason: 'error'
+                };
             }
         }
 
@@ -675,9 +811,9 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
                 PROG.teacherDistributionView = 'planned';
                 saveState();
             }
+
             render();
         }
-
         // MIH-006 / OBS-13: يبقى تخطيط الأسبوع ثابتاً، ويُرحَّل إلى
         // الأسبوع التالي فقط أطول تسلسل منجز فعلياً بلا فجوة.
         function getNewMemBaseIndex() {
@@ -6827,8 +6963,18 @@ const _fbDb = firebase.database();
 window._fbDb = _fbDb;
 
 // === تسجيل دخول مجهول (Anonymous) لتفعيل صلاحية الكتابة حسب قواعد الحماية الجديدة ===
-firebase.auth().signInAnonymously().catch(err => {
-    console.error("Firebase Anonymous Auth error:", err);
+// انتظار اكتمال المصادقة قبل قراءة بيانات الطالبة من Firebase.
+const _fbAuthReady = firebase.auth().currentUser
+    ? Promise.resolve(firebase.auth().currentUser)
+    : firebase.auth().signInAnonymously().then(result => result.user);
+
+_fbAuthReady.catch(error => {
+    console.error(
+        "Firebase Anonymous Auth error:",
+        error.code,
+        error.message,
+        error
+    );
 });
 function formatLocalDateKey(date) {
     const d = new Date(date);
