@@ -614,9 +614,67 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
             return (PROG.teacherDistributionView || 'planned') === 'planned';
         }
 
-        function setTeacherDistributionView(mode) {
-            PROG.teacherDistributionView = mode === 'actual' ? 'actual' : 'planned';
-            saveState();
+        // === ميزة "التوزيع الفعلي الحقيقي للمعلمة" (طلب صريح من بسمة، متابعة مباشرة
+        // لإنجاز الطالبة الفعلي) ===
+        // عند اختيار "actual"، نجلب بيانات الطالبة الحقيقية من student_full_tracking
+        // (التي ترسلها نسخة الطالبة تلقائياً) ونستبدل TRACKING/stations/PROG.week
+        // في الذاكرة فقط (بلا saveState — يحميها الحارس أعلاه أيضاً بصرف النظر)،
+        // مع نسخة احتياطية لاستعادتها فور الرجوع لـ"planned". إن تعذّر الجلب (لا
+        // اتصال، أو الطالبة لم تُرسل بيانات بعد)، نُبقي على الحساب المحلي المعتاد
+        // مع تنبيه صريح للمعلمة بدل الادّعاء الصامت بأنها ترى بيانات حقيقية.
+        window._viewingLiveStudentData = false;
+        window._teacherOwnTrackingBackup = null;
+        window._teacherOwnStationsBackup = null;
+        window._liveStudentDataInfo = null;
+
+        function restoreTeacherOwnDataIfNeeded() {
+            if (window._viewingLiveStudentData) {
+                TRACKING = window._teacherOwnTrackingBackup || TRACKING;
+                stations = window._teacherOwnStationsBackup || stations;
+                window._viewingLiveStudentData = false;
+            }
+            window._liveStudentDataInfo = null;
+        }
+
+        async function loadLiveStudentActualData() {
+            const studentName = String(S?.programName || '').trim();
+            const fbRef = (typeof window !== 'undefined' && window._fbDb) ? window._fbDb : (typeof _fbDb !== 'undefined' ? _fbDb : undefined);
+            if (!studentName || typeof fbRef === 'undefined') {
+                window._liveStudentDataInfo = { found: false, reason: 'no-connection' };
+                return;
+            }
+            const key = studentName.replace(/[.#$[\]]/g, '_');
+            try {
+                const snapshot = await fbRef.ref('student_full_tracking/' + key).once('value');
+                const remote = snapshot.val();
+                if (!remote || !remote.TRACKING) {
+                    window._liveStudentDataInfo = { found: false, reason: 'no-data' };
+                    return;
+                }
+                if (!window._viewingLiveStudentData) {
+                    window._teacherOwnTrackingBackup = TRACKING;
+                    window._teacherOwnStationsBackup = stations;
+                }
+                TRACKING = remote.TRACKING || {};
+                if (Array.isArray(remote.stations)) stations = remote.stations;
+                if (Number.isInteger(remote.PROG && remote.PROG.week)) PROG.week = remote.PROG.week;
+                window._viewingLiveStudentData = true;
+                window._liveStudentDataInfo = { found: true, fetchedAt: remote.lastUpdate || null };
+            } catch (e) {
+                console.warn('تعذّر جلب بيانات الطالبة الحقيقية:', e);
+                window._liveStudentDataInfo = { found: false, reason: 'error' };
+            }
+        }
+
+        async function setTeacherDistributionView(mode) {
+            if (mode === 'actual') {
+                PROG.teacherDistributionView = 'actual';
+                await loadLiveStudentActualData();
+            } else {
+                restoreTeacherOwnDataIfNeeded();
+                PROG.teacherDistributionView = 'planned';
+                saveState();
+            }
             render();
         }
 
@@ -912,6 +970,15 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
         }
 
         function saveState(runtimeSourceOverride = null) {
+            // === حارس أمان (ميزة التوزيع الفعلي الحقيقي): يمنع الكتابة فوق بيانات
+            // المعلمة المحلية بالخطأ أثناء عرض بيانات طالبة حقيقية مؤقتة (مستبدَلة
+            // في الذاكرة فقط عبر loadLiveStudentActualData، غير محفوظة أصلاً). أي
+            // استدعاء لـsaveState في هذه الأثناء يُرفَض صراحةً مع تحذير، بدل أن
+            // يُطبَّق صمتاً ويُفسد برنامج المعلمة الأصلي.
+            if (window._viewingLiveStudentData) {
+                console.warn('تم تجاهل saveState: العرض الحالي بيانات طالبة حقيقية مؤقتة، لا بيانات المعلمة المحلية.');
+                return;
+            }
             const runtimeSource = runtimeSourceOverride || getCurrentStoredState();
             const hizbRuntimeState = getProgramHizbRuntimeState(runtimeSource);
             const data = { S, PROG, TRACKING, stations, editSession, pendingStationTransition, editHistory, startDate: PROGRAM_START_DATE ? PROGRAM_START_DATE.toISOString() : null, ...hizbRuntimeState };
@@ -4134,10 +4201,9 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             // FINAL_REVIEW_DELAY_DAYS يُعرَّف هنا (لا بعد الحلقة) لاستخدامه لاحقاً في isFullyTransferred.
             // === تصحيح MIH-002 (طلب صريح من بسمة، 2026-09-12): توحيد قاعدة الدورتين ===
             // كان النطاق الأساسي (mfFrom/mfTo) ينتقل فعلياً للمتقن بعد دورة واحدة فقط (6 أيام)،
-            // بخلاف حزب متخرِّج من الحفظ الجديد الذي يأخذ دورتين (activeDays*2) في newHizbMfList.
-            // بسمة أكّدت أن القاعدة المقصودة دائماً: دورتان لأي حزب في المتفلت (أصلياً أو متخرجاً)
-            // قبل الانتقال فعلياً للمتقن واختفائه من المتفلت. توحيد الرقمين هنا يحقق ذلك.
-            const FINAL_REVIEW_DELAY_DAYS = activeDays * 2; // دورتان كاملتان قبل الانتقال الفعلي للمتقن
+            // المتفلت الأصلي يحسب دورته الأولى أثناء تقدم الورد؛ وبعدها تلزم ستة أيام
+            // للمراجعة الثانية قبل النقل. هذا مستقل عن طابور المتخرج من الحفظ الجديد.
+            const FINAL_REVIEW_DELAY_DAYS = 6; // الدورة الثانية للمتفلت الأصلي؛ دورته الأولى محسوبة أثناء تقدم الورد
             // === دعم استمرار المراجعة التراكمية من مرحلة سابقة (لا تصفير) — تصحيح جوهري 2026-07-26 ===
             // S._mfCarryoverRemainingDays: عدد أيام المراجعة المتبقية فعلياً (١-٦) من ذيل حزب اكتمل ورده
             // في المرحلة السابقة. يُستخدم فقط لعرض نص مراجعة مستقل تماماً لأول globalDay أيام (أدناه)،
@@ -4536,6 +4602,41 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
             const originalMfStartPage = fP ? Math.max(1, Math.min(604, fP.start)) : 0;
             const originalMfIsContinuousWithBase = originalMfStartPage > 0 &&
                 originalMfStartPage <= inheritedMutqanEndPage + 1;
+            // MIH-016: يبدأ عد الدورتين من أول يوم يظهر فيه الحزب كاملاً للمراجعة.
+            // اليوم 1–6 دورة أولى، واليوم 7–12 دورة ثانية، وفي اليوم التالي يدخل
+            // المتقن فوراً؛ بلا انتظار اكتمال أسبوع وبلا محاذاة مع بدايته.
+            let originalMfHizbReadyEndPage = 0;
+            const originalMfHizbTransfers = [];
+            if (fP && totalBaseMfUnits > 0) {
+                const firstOriginalMfHizb = getRealHizbNum(originalMfStartPage);
+                const lastOriginalMfHizb = getRealHizbNum(fP.end);
+                for (let hizb = firstOriginalMfHizb; hizb <= lastOriginalMfHizb; hizb++) {
+                    const realHizbStart = HIZB_START_PAGES[hizb - 1];
+                    const realHizbEnd = hizb < 60 ? HIZB_START_PAGES[hizb] - 1 : 604;
+                    const coveredStart = Math.max(originalMfStartPage, realHizbStart);
+                    const coveredEnd = Math.min(fP.end, realHizbEnd);
+                    if (coveredStart !== realHizbStart || coveredEnd !== realHizbEnd) continue;
+                    const hizbEndIndex = getEndingAbsIndexForPage(realHizbEnd, S.dailyUnit);
+                    const unitsNeeded = hizbEndIndex - startMfIndex + 1;
+                    if (unitsNeeded < 1 || unitsNeeded > totalBaseMfUnits) continue;
+                    let completedOnGlobalDay = null;
+                    for (let day = 1; day <= globalDaysEndOfWeek; day++) {
+                        if (getMfTimelineUnitsBeforeDay(day + 1, activeDays, mfDayLimitForCapacity) >= unitsNeeded) {
+                            completedOnGlobalDay = day;
+                            break;
+                        }
+                    }
+                    if (completedOnGlobalDay === null) continue;
+                    const firstReviewDay = completedOnGlobalDay + 1;
+                    const mutqanStartDay = firstReviewDay + activeDays * 2;
+                    originalMfHizbTransfers.push({ hizb, realHizbEnd, mutqanStartDay });
+                    // ما انتقل قبل بداية الأسبوع يدخل التوزيع الأسبوعي المعتاد؛ أما
+                    // ما يحين نقله في وسط الأسبوع فيضاف في يوم انتقاله أدناه.
+                    if (currentWeekFirstGlobalDay >= mutqanStartDay) {
+                        originalMfHizbReadyEndPage = Math.max(originalMfHizbReadyEndPage, realHizbEnd);
+                    }
+                }
+            }
             // في البرامج التي تبدأ بلا متقن نبقي بوابة الانتقال الأصلية مستقرة:
             // لا يبدأ النقل حتى يتكوّن في المتفلت رصيد جزء كامل، والحساب يكون من
             // الرصيد المكتمل عند بداية الأسبوع لا مما سيُنجز أثناءه. بعد فتح البوابة
@@ -4567,10 +4668,13 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                 }
             }
             const continuousMfReachedEndPage = originalMfIsContinuousWithBase
-                ? (S.hasInitialMutqan === false ? noInitialMutqanCompletedHizbEnd : mfReachedEndPage)
+                ? (S.hasInitialMutqan === false
+                    ? noInitialMutqanCompletedHizbEnd
+                    : Math.max(mfReachedEndPage, originalMfHizbReadyEndPage))
                 : 0;
-            const independentOriginalMfEndPage = (!originalMfIsContinuousWithBase && mfReachedEndPage > 0)
-                ? getSnappedMutqanEnd(mfReachedEndPage, S.mutqanReviewUnit, false)
+            const independentOriginalMfRawEndPage = Math.max(mfReachedEndPage, originalMfHizbReadyEndPage);
+            const independentOriginalMfEndPage = (!originalMfIsContinuousWithBase && independentOriginalMfRawEndPage > 0)
+                ? getSnappedMutqanEnd(independentOriginalMfRawEndPage, S.mutqanReviewUnit, false)
                 : 0;
             // الحزب المعلّق الموروث هو تغطية فعلية كانت تنتظر اكتمال وحدة العرض؛
             // ندخله في النهاية الخام قبل التقريب بدل عرضه كإضافة مستقلة.
@@ -4873,6 +4977,15 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                 let mutqanText = effectiveMutqanSched[mutqanScheduleIndex]
                     ? effectiveMutqanSched[mutqanScheduleIndex].label
                     : "—";
+                const originalMfTransferToday = originalMfHizbTransfers.find(item =>
+                    item.mutqanStartDay === globalDay
+                );
+                if (originalMfTransferToday) {
+                    const transferredLabel = `ح ${originalMfTransferToday.hizb}`;
+                    mutqanText = mutqanText && mutqanText !== "—"
+                        ? `${mutqanText}<br><span class="text-emerald-700">+ ${transferredLabel}</span>`
+                        : transferredLabel;
+                }
                 const isMutqanCycleEnd = S.mutqanDays === 10 &&
                     mutqanScheduleIndex === mutqanCycleLastTaskIndex &&
                     mutqanText !== "—";
@@ -4967,8 +5080,15 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                         // ونمنعه من أن يكون حداً أدنى جديداً لبداية النافذة التراكمية. فرع
                         // hasInitialMutqan===false له آليته الخاصة أصلاً (noInitialTransferredMfUnits)
                         // ولا يُمس هنا.
-                        const mutqanConsolidatedUpToIndex = (S.hasInitialMutqan !== false && snappedEndThisWeek > 0)
-                            ? getEndingAbsIndexForPage(snappedEndThisWeek, S.dailyUnit)
+                        const originalMfTransferredThroughToday = originalMfHizbTransfers
+                            .filter(item => item.mutqanStartDay <= globalDay)
+                            .reduce((end, item) => Math.max(end, item.realHizbEnd), 0);
+                        const mutqanConsolidatedThroughToday = Math.max(
+                            snappedEndThisWeek,
+                            originalMfTransferredThroughToday
+                        );
+                        const mutqanConsolidatedUpToIndex = (S.hasInitialMutqan !== false && mutqanConsolidatedThroughToday > 0)
+                            ? getEndingAbsIndexForPage(mutqanConsolidatedThroughToday, S.dailyUnit)
                             : -1;
                         const mfCumStart = mfCumulativeEnd >= mfCumulativeBaseStart
                             ? (S.hasInitialMutqan === false
@@ -6305,6 +6425,11 @@ else if (S.step === 8) {
                         <button onclick="setTeacherDistributionView('actual')" aria-pressed="${!isPlannedDistributionView()}" style="padding:9px 8px;border-radius:11px;font-size:11px;font-weight:800;border:1px solid ${!isPlannedDistributionView() ? '#047857' : '#e2e8f0'};background:${!isPlannedDistributionView() ? '#ecfdf5' : '#fff'};color:${!isPlannedDistributionView() ? '#047857' : '#64748b'};">✅ التوزيع الفعلي</button>
                     </div>
                     <div style="margin-top:6px;text-align:center;font-size:9px;font-weight:700;color:#64748b;">${isPlannedDistributionView() ? 'معاينة الخطة كاملة دون اشتراط الإنجاز' : 'التوزيع بحسب الإنجاز المتتابع الحقيقي'}</div>
+                    ${(!isPlannedDistributionView() && window._liveStudentDataInfo) ? (
+                        window._liveStudentDataInfo.found
+                            ? `<div style="margin-top:4px;text-align:center;font-size:9px;font-weight:800;color:#047857;">✅ بيانات الطالبة الحقيقية المستلمة${window._liveStudentDataInfo.fetchedAt ? ' — آخر تحديث: ' + new Date(window._liveStudentDataInfo.fetchedAt).toLocaleString('ar') : ''}</div>`
+                            : `<div style="margin-top:4px;text-align:center;font-size:9px;font-weight:800;color:#b45309;">⚠️ تعذّر جلب بيانات الطالبة الحقيقية (${window._liveStudentDataInfo.reason === 'no-data' ? 'لم تُرسِل الطالبة بيانات بعد' : window._liveStudentDataInfo.reason === 'no-connection' ? 'لا يوجد اتصال' : 'خطأ في الجلب'}) — المعروض حسابٌ محلي فقط</div>`
+                    ) : ''}
                 </div>
                 
                 <div class="w-full bg-white border border-slate-200 rounded-2xl shadow-sm mb-3" style="width:100%;overflow-x:auto;box-sizing:border-box;" id="tbl-wrapper"></div>
@@ -6699,6 +6824,7 @@ firebase.initializeApp({
     appId: "1:791618163486:web:4afe02716d3fd5b99d6f0f"
 });
 const _fbDb = firebase.database();
+window._fbDb = _fbDb;
 
 // === تسجيل دخول مجهول (Anonymous) لتفعيل صلاحية الكتابة حسب قواعد الحماية الجديدة ===
 firebase.auth().signInAnonymously().catch(err => {
