@@ -3682,12 +3682,42 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
                     continue;
                 }
 
-                let lbl = "";
-                if (reviewUnit === "بالسور") {
-                    lbl = dayItems.length === 1 ? dayItems[0].name : `${dayItems[0].name} ← ${dayItems[dayItems.length-1].name}`;
-                } else {
-                    lbl = dayItems.length === 1 ? `${unitName} ${dayItems[0].name}` : `${unitName} ${dayItems[0].name}–${dayItems[dayItems.length-1].name}`;
-                }
+let lbl = "";
+if (reviewUnit === "بالسور") {
+    lbl = dayItems.length === 1
+        ? dayItems[0].name
+        : `${dayItems[0].name} ← ${dayItems[dayItems.length - 1].name}`;
+} else if (reviewUnit === "بنصف حزب") {
+    const formatHalfHizb = (number) => {
+        const halfNumber = ((number - 1) % 2) + 1;
+        const hizbNumber = Math.floor((number - 1) / 2) + 1;
+        return `نصف ${halfNumber} / ح${hizbNumber}`;
+    };
+
+    const parts = [];
+
+    for (let i = 0; i < dayItems.length; i++) {
+        const currentNumber = dayItems[i].name;
+        const nextNumber = dayItems[i + 1]?.name;
+
+        const isFirstHalf = currentNumber % 2 === 1;
+        const hasItsSecondHalf = nextNumber === currentNumber + 1;
+
+        if (isFirstHalf && hasItsSecondHalf) {
+            const hizbNumber = Math.floor((currentNumber - 1) / 2) + 1;
+            parts.push(`الحزب ${hizbNumber}`);
+            i++;
+        } else {
+            parts.push(formatHalfHizb(currentNumber));
+        }
+    }
+
+    lbl = parts.join(" + ");
+} else {
+    lbl = dayItems.length === 1
+        ? `${unitName} ${dayItems[0].name}`
+        : `${unitName} ${dayItems[0].name}–${dayItems[dayItems.length - 1].name}`;
+}
 
                 schedule.push({ label: lbl, start: dayItems[0].start, end: dayItems[dayItems.length-1].end });
             }
@@ -6657,7 +6687,13 @@ else if (S.step === 8) {
                 }
 
                 if (isNewReviewEnabled()) {
-                        h += `<td class="p-2 border-l border-slate-200 text-center align-top"><div class="font-bold text-amber-900 leading-normal">${r.newMem}</div>${r.newMem !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newMem')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newMem')}</button>` : ""}</td>
+                        h += `<td class="p-2 border-l border-slate-200 text-center align-top">${r.newMem !== "—"
+    ? `<div class="font-bold text-amber-900 leading-normal"
+            style="display:inline-block;background-color:#fef3c7;border-radius:8px;padding:5px 10px;">
+            ${r.newMem}
+       </div>`
+    : `<div class="font-bold text-amber-900 leading-normal">—</div>`
+}${r.newMem !== "—" ? `<button onclick="toggleTrack(${r.day}, 'newMem')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newMem')}</button>` : ""}</td>
                             <td class="p-2 text-center align-top"><div class="new-review-cell-text font-bold text-indigo-900 text-[11px] leading-relaxed whitespace-pre-line">${r.newReview}</div>${isTrackableCell(r, 'newReview') ? `<button onclick="toggleTrack(${r.day}, 'newReview')" class="mt-2 mx-auto block text-base">${getTrackEmoji(r.day, 'newReview')}</button>` : ""}</td>`;
                     }
                     tr.innerHTML = h;
