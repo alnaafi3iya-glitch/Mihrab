@@ -7020,11 +7020,14 @@ window.pushToLeaderboard = async function({ recordActivity = false } = {}) {
         Object.entries(dataToPush).forEach(([field, value]) => {
             updates[`leaderboard/${key}/${field}`] = value;
         });
-        updates[`leaderboard/${key}/history/${programId}/${historyWeekKey}`] = historySnapshot;
-        if (recordActivity) {
-            updates[`leaderboard/${key}/history/${programId}/${historyWeekKey}/lastActivityAt`] = now;
-            updates[`leaderboard/${key}/history/${programId}/${historyWeekKey}/activityDates/${formatLocalDateKey(new Date())}`] = true;
-        }
+Object.entries(historySnapshot).forEach(([field, value]) => {
+    updates[`leaderboard/${key}/history/${programId}/${historyWeekKey}/${field}`] = value;
+});
+
+if (recordActivity) {
+    updates[`leaderboard/${key}/history/${programId}/${historyWeekKey}/lastActivityAt`] = now;
+    updates[`leaderboard/${key}/history/${programId}/${historyWeekKey}/activityDates/${formatLocalDateKey(new Date())}`] = true;
+}
         // === ميزة "التوزيع الفعلي الحقيقي للمعلمة" (طلب صريح من بسمة، متابعة مباشرة
         // لإنجاز الطالبة الفعلي) — موثَّقة أصلاً في MIH-008 ===
         updates[`student_full_tracking/${key}`] = {
