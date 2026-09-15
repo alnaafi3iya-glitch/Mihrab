@@ -4145,10 +4145,9 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             // FINAL_REVIEW_DELAY_DAYS يُعرَّف هنا (لا بعد الحلقة) لاستخدامه لاحقاً في isFullyTransferred.
             // === تصحيح MIH-002 (طلب صريح من بسمة، 2026-09-12): توحيد قاعدة الدورتين ===
             // كان النطاق الأساسي (mfFrom/mfTo) ينتقل فعلياً للمتقن بعد دورة واحدة فقط (6 أيام)،
-            // بخلاف حزب متخرِّج من الحفظ الجديد الذي يأخذ دورتين (activeDays*2) في newHizbMfList.
-            // بسمة أكّدت أن القاعدة المقصودة دائماً: دورتان لأي حزب في المتفلت (أصلياً أو متخرجاً)
-            // قبل الانتقال فعلياً للمتقن واختفائه من المتفلت. توحيد الرقمين هنا يحقق ذلك.
-            const FINAL_REVIEW_DELAY_DAYS = activeDays * 2; // دورتان كاملتان قبل الانتقال الفعلي للمتقن
+            // المتفلت الأصلي يحسب دورته الأولى أثناء تقدم الورد؛ وبعدها تلزم ستة أيام
+            // للمراجعة الثانية قبل النقل. هذا مستقل عن طابور المتخرج من الحفظ الجديد.
+            const FINAL_REVIEW_DELAY_DAYS = 6; // الدورة الثانية للمتفلت الأصلي؛ دورته الأولى محسوبة أثناء تقدم الورد
             // === دعم استمرار المراجعة التراكمية من مرحلة سابقة (لا تصفير) — تصحيح جوهري 2026-07-26 ===
             // S._mfCarryoverRemainingDays: عدد أيام المراجعة المتبقية فعلياً (١-٦) من ذيل حزب اكتمل ورده
             // في المرحلة السابقة. يُستخدم فقط لعرض نص مراجعة مستقل تماماً لأول globalDay أيام (أدناه)،
@@ -4547,6 +4546,39 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
             const originalMfStartPage = fP ? Math.max(1, Math.min(604, fP.start)) : 0;
             const originalMfIsContinuousWithBase = originalMfStartPage > 0 &&
                 originalMfStartPage <= inheritedMutqanEndPage + 1;
+            // MIH-016: يبدأ عد الدورتين من أول يوم يظهر فيه الحزب كاملاً للمراجعة.
+            // اليوم 1–6 دورة أولى، واليوم 7–12 دورة ثانية، وفي اليوم التالي يدخل
+            // المتقن فوراً؛ بلا انتظار اكتمال أسبوع وبلا محاذاة مع بدايته.
+            let originalMfHizbReadyEndPage = 0;
+            const originalMfHizbTransfers = [];
+            if (fP && totalBaseMfUnits > 0) {
+                const firstOriginalMfHizb = getRealHizbNum(originalMfStartPage);
+                const lastOriginalMfHizb = getRealHizbNum(fP.end);
+                for (let hizb = firstOriginalMfHizb; hizb <= lastOriginalMfHizb; hizb++) {
+                    const realHizbStart = HIZB_START_PAGES[hizb - 1];
+                    const realHizbEnd = hizb < 60 ? HIZB_START_PAGES[hizb] - 1 : 604;
+                    const coveredStart = Math.max(originalMfStartPage, realHizbStart);
+                    const coveredEnd = Math.min(fP.end, realHizbEnd);
+                    if (coveredStart !== realHizbStart || coveredEnd !== realHizbEnd) continue;
+                    const hizbEndIndex = getEndingAbsIndexForPage(realHizbEnd, S.dailyUnit);
+                    const unitsNeeded = hizbEndIndex - startMfIndex + 1;
+                    if (unitsNeeded < 1 || unitsNeeded > totalBaseMfUnits) continue;
+                    let completedOnGlobalDay = null;
+                    for (let day = 1; day <= globalDaysEndOfWeek; day++) {
+                        if (getMfTimelineUnitsBeforeDay(day + 1, activeDays, mfDayLimitForCapacity) >= unitsNeeded) {
+                            completedOnGlobalDay = day;
+                            break;
+                        }
+                    }
+                    if (completedOnGlobalDay === null) continue;
+                    const firstReviewDay = completedOnGlobalDay + 1;
+                    const mutqanStartDay = firstReviewDay + activeDays * 2;
+                    originalMfHizbTransfers.push({ hizb, realHizbEnd, mutqanStartDay });
+                    if (currentWeekFirstGlobalDay >= mutqanStartDay) {
+                        originalMfHizbReadyEndPage = Math.max(originalMfHizbReadyEndPage, realHizbEnd);
+                    }
+                }
+            }
             // في البرامج التي تبدأ بلا متقن نبقي بوابة الانتقال الأصلية مستقرة:
             // لا يبدأ النقل حتى يتكوّن في المتفلت رصيد جزء كامل، والحساب يكون من
             // الرصيد المكتمل عند بداية الأسبوع لا مما سيُنجز أثناءه. بعد فتح البوابة
@@ -4578,10 +4610,13 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                 }
             }
             const continuousMfReachedEndPage = originalMfIsContinuousWithBase
-                ? (S.hasInitialMutqan === false ? noInitialMutqanCompletedHizbEnd : mfReachedEndPage)
+                ? (S.hasInitialMutqan === false
+                    ? noInitialMutqanCompletedHizbEnd
+                    : Math.max(mfReachedEndPage, originalMfHizbReadyEndPage))
                 : 0;
-            const independentOriginalMfEndPage = (!originalMfIsContinuousWithBase && mfReachedEndPage > 0)
-                ? getSnappedMutqanEnd(mfReachedEndPage, S.mutqanReviewUnit, false)
+            const independentOriginalMfRawEndPage = Math.max(mfReachedEndPage, originalMfHizbReadyEndPage);
+            const independentOriginalMfEndPage = (!originalMfIsContinuousWithBase && independentOriginalMfRawEndPage > 0)
+                ? getSnappedMutqanEnd(independentOriginalMfRawEndPage, S.mutqanReviewUnit, false)
                 : 0;
             // الحزب المعلّق الموروث هو تغطية فعلية كانت تنتظر اكتمال وحدة العرض؛
             // ندخله في النهاية الخام قبل التقريب بدل عرضه كإضافة مستقلة.
@@ -4871,6 +4906,15 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                 let mutqanText = effectiveMutqanSched[mutqanScheduleIndex]
                     ? effectiveMutqanSched[mutqanScheduleIndex].label
                     : "—";
+                const originalMfTransferToday = originalMfHizbTransfers.find(item =>
+                    item.mutqanStartDay === globalDay
+                );
+                if (originalMfTransferToday) {
+                    const transferredLabel = `ح ${originalMfTransferToday.hizb}`;
+                    mutqanText = mutqanText && mutqanText !== "—"
+                        ? `${mutqanText}<br><span class="text-emerald-700">+ ${transferredLabel}</span>`
+                        : transferredLabel;
+                }
                 const isMutqanCycleEnd = S.mutqanDays === 10 &&
                     mutqanScheduleIndex === mutqanCycleLastTaskIndex &&
                     mutqanText !== "—";
@@ -4957,8 +5001,15 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                             ? PROG.mfCumulativeInitialEndIndex
                             : startMfIndex - 1;
                         const mfCumulativeEnd = mfCumulativeInitialEnd + clampedIndexForCumul;
-                        const mutqanConsolidatedUpToIndex = (S.hasInitialMutqan !== false && snappedEndThisWeek > 0)
-                            ? getEndingAbsIndexForPage(snappedEndThisWeek, S.dailyUnit)
+                        const originalMfTransferredThroughToday = originalMfHizbTransfers
+                            .filter(item => item.mutqanStartDay <= globalDay)
+                            .reduce((end, item) => Math.max(end, item.realHizbEnd), 0);
+                        const mutqanConsolidatedThroughToday = Math.max(
+                            snappedEndThisWeek,
+                            originalMfTransferredThroughToday
+                        );
+                        const mutqanConsolidatedUpToIndex = (S.hasInitialMutqan !== false && mutqanConsolidatedThroughToday > 0)
+                            ? getEndingAbsIndexForPage(mutqanConsolidatedThroughToday, S.dailyUnit)
                             : -1;
                         const mfCumStart = mfCumulativeEnd >= mfCumulativeBaseStart
                             ? (S.hasInitialMutqan === false
@@ -5151,7 +5202,14 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                     if (isTrackableCell(r, 'newReview')) setTrackStatus(PROG.week, r.day, 'newReview', 'done');
                 }
             });
+            // === تصحيح MIH-009 (اكتشاف عبر اختبار بسمة الفعلي لميزة التوزيع الفعلي): ===
+            // completeToday() كانت تفتقر لاستدعاء pushToLeaderboard() الموجود في معالج
+            // الضغط الفردي على كل خانة — فكان زر "✓ إنهاء" (إنجاز اليوم دفعة واحدة) لا
+            // يُزامن مع الحلبة ولا مع "التوزيع الفعلي" في نسخة المعلمة إطلاقاً، رغم أنه
+            // يُنجز فعلياً في التتبع المحلي للطالبة. خلل أصلي سابق لكل هذه المحادثة، كشفه
+            // أول استخدام حقيقي لمسار student_full_tracking.
             saveState(); render();
+            pushToLeaderboard({ recordActivity: true });
         }
 
         function getTrackKey(week, day, col) { return `w${week}_d${day}_${col}`; }
@@ -6704,10 +6762,19 @@ firebase.initializeApp({
     appId: "1:791618163486:web:4afe02716d3fd5b99d6f0f"
 });
 const _fbDb = firebase.database();
+window._fbDb = _fbDb;
 
-// === تسجيل دخول مجهول (Anonymous) لتفعيل صلاحية الكتابة حسب قواعد الحماية الجديدة ===
-firebase.auth().signInAnonymously().catch(err => {
-    console.error("Firebase Anonymous Auth error:", err);
+// === تصحيح MIH-010 (تشخيص مشترك: اكتشاف ذاتي + تأكيد من تحليل خارجي مستقل) ===
+// المشكلة: signInAnonymously() كانت غير منتظَرة (بلا await)، فقد تُستدعى الكتابات
+// (pushToLeaderboard) قبل اكتمال المصادقة فعلياً — خصوصاً على شبكات أبطأ (هاتف/بيانات
+// جوال)، فترفضها قاعدة الأمان "auth != null" بصمت. الحل: Promise واحدة موثوقة تُنتظَر
+// صراحة داخل أي عملية كتابة قبل تنفيذها، بدل الاعتماد على توقيت التحميل فقط.
+const _fbAuthReady = firebase.auth().currentUser
+    ? Promise.resolve(firebase.auth().currentUser)
+    : firebase.auth().signInAnonymously().then(result => result.user);
+
+_fbAuthReady.catch(error => {
+    console.error('Firebase Anonymous Auth error:', error.code, error.message, error);
 });
 function formatLocalDateKey(date) {
     const d = new Date(date);
@@ -6832,7 +6899,7 @@ function getAdminDueProgressSnapshot() {
     }
 }
 
-window.pushToLeaderboard = function({ recordActivity = false } = {}) {
+window.pushToLeaderboard = async function({ recordActivity = false } = {}) {
     try {
         // 1. جلب البيانات الأساسية مع حماية ضد الـ null
         const raw = localStorage.getItem('qps_current_program_v6');
@@ -6843,6 +6910,11 @@ window.pushToLeaderboard = function({ recordActivity = false } = {}) {
         const studentName = S.programName || PROG.name;
         
         if (!studentName) { console.error("اسم الطالب مفقود"); return; }
+
+        // === تصحيح MIH-010: انتظار اكتمال المصادقة المجهولة فعليًا قبل أي كتابة ===
+        // (كانت الكتابة تُحاوَل فورًا دون التأكد من اكتمال signInAnonymously، فتُرفض
+        // بصمت على الشبكات الأبطأ من الحلقة الأولى للأحداث في المتصفح).
+        await _fbAuthReady;
 
         // النسب الشخصية تبقى محفوظة للمتابعة الإدارية، أما الحلبة فلها حسابها المقيد باليوم الحالي.
         const personalWeekPct     = state._weekPct     ?? 0;
@@ -6934,25 +7006,41 @@ window.pushToLeaderboard = function({ recordActivity = false } = {}) {
             journeyWeek
         };
 
-        // 4. الإرسال مع تحقق
-        const studentRef = _fbDb.ref('leaderboard/' + key);
-        studentRef.update(dataToPush, (error) => {
-            if (error) {
-                console.error("فشل الإرسال:", error);
-            } else {
-                console.log("تم تحديث اللوحة بنجاح!");
-            }
+        // === تصحيح MIH-010: تجميع كل الكتابات (الحلبة + السجل الأسبوعي + التتبع الكامل
+        // للمعلمة) في تحديث ذرّي واحد من جذر القاعدة، بدل عدة نداءات .update()/.set()
+        // مستقلة بلا تنسيق فيما بينها — فإما تنجح كلها معًا أو تفشل كلها معًا، ويُسجَّل
+        // خطأ واحد واضح (بكوده ورسالته الكاملة) بدل رسائل متفرقة بلا سياق كافٍ.
+        const updates = {};
+        // === تصحيح MIH-011 (اكتشاف خارجي، مؤكَّد بدليل مباشر عبر مكتبة Firebase
+        // الحقيقية): لا يجوز وضع مسار أب (leaderboard/{key}) ومسار فرعي منه
+        // (leaderboard/{key}/history/...) معًا في نفس عملية update() الذرية —
+        // Firebase يرفض العملية بأكملها فورًا (خطأ تركيبي محلي قبل أي اتصال شبكي).
+        // هذا كان يمنع كل كتابة منذ MIH-010 (لا الهاتف وحده). الحل: تفكيك dataToPush
+        // إلى حقوله المفردة تحت مسارات مباشرة، فلا يتبقى أي مسار أب يتعارض مع أبنائه.
+        Object.entries(dataToPush).forEach(([field, value]) => {
+            updates[`leaderboard/${key}/${field}`] = value;
         });
-        studentRef.child(`history/${programId}/${historyWeekKey}`).update(historySnapshot);
+        updates[`leaderboard/${key}/history/${programId}/${historyWeekKey}`] = historySnapshot;
         if (recordActivity) {
-            studentRef.child(`history/${programId}/${historyWeekKey}/lastActivityAt`).set(now);
-            studentRef.child(`history/${programId}/${historyWeekKey}/activityDates/${formatLocalDateKey(new Date())}`).set(true);
+            updates[`leaderboard/${key}/history/${programId}/${historyWeekKey}/lastActivityAt`] = now;
+            updates[`leaderboard/${key}/history/${programId}/${historyWeekKey}/activityDates/${formatLocalDateKey(new Date())}`] = true;
         }
+        // === ميزة "التوزيع الفعلي الحقيقي للمعلمة" (طلب صريح من بسمة، متابعة مباشرة
+        // لإنجاز الطالبة الفعلي) — موثَّقة أصلاً في MIH-008 ===
+        updates[`student_full_tracking/${key}`] = {
+            TRACKING: TRACKING || {},
+            stations: Array.isArray(stations) ? stations : [],
+            PROG: { week: PROG.week, programStartWeek: PROG.programStartWeek || 1 },
+            lastUpdate: now
+        };
 
-    } catch (e) {
-        console.error("حدث خطأ أثناء معالجة البيانات:", e);
+        await _fbDb.ref().update(updates);
+        console.log('تمت مزامنة بيانات الطالبة بنجاح.');
+    } catch (error) {
+        console.error('فشل مزامنة بيانات الطالبة:', error?.code, error?.message, error);
     }
 };
+
 
 // ============================================================
 // أدوات ترحيل سجل المراحل — تشغيل يدوي فقط
