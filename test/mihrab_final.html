@@ -677,7 +677,7 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
 
         async function recordProgramGeneration({ isNewProgram = false } = {}) {
             try {
-                await firebase.auth().signInAnonymously();
+                await _fbAuth.signInAnonymously();
                 const monthKey = getUsageMonthKey();
                 const increment = firebase.database.ServerValue.increment(1);
                 const updates = {
@@ -688,7 +688,7 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
                 if (isNewProgram) {
                     updates['usage_stats/totals/programsCreated'] = increment;
                 }
-                await firebase.database().ref().update(updates);
+                await _fbDb.ref().update(updates);
             } catch (error) {
                 console.warn('تعذر تحديث إحصاءات الاستعمال:', error);
             }
@@ -5790,6 +5790,10 @@ else if (S.step === 8) {
                     <button onclick="openRulesModal()" class="py-3 bg-teal-50 text-teal-700 font-bold border border-teal-200 rounded-xl hover:bg-teal-100 transition text-xs flex items-center justify-center gap-2">📖 شرح النظام</button>
                 </div>
                 
+                <div class="w-full grid grid-cols-2 gap-2 mb-2" aria-label="دليل قراءة البرنامج">
+                    <div class="rounded-xl bg-sky-50 border border-sky-200 px-3 py-2 text-center"><span class="block text-[10px] font-bold text-sky-600">المخطط</span><b class="text-xs text-sky-900">نص الورد المقرر</b></div>
+                    <div class="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-center"><span class="block text-[10px] font-bold text-emerald-600">الإنجاز الفعلي</span><b class="text-xs text-emerald-900">مربعات الإنجاز في الجدول</b></div>
+                </div>
                 <div class="w-full bg-white border border-slate-200 rounded-2xl shadow-sm mb-3" style="width:100%;overflow-x:auto;box-sizing:border-box;" id="tbl-wrapper"></div>
                 <div class="w-full flex justify-between items-center gap-2 bg-white border border-slate-200 p-3 rounded-2xl shadow-sm mb-3">
                     <button onclick="prevWeek()" class="flex-1 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition disabled:opacity-40 text-center" ${PROG.week <= 1 ? "disabled" : ""}>← السابق</button>
@@ -6154,7 +6158,7 @@ card.appendChild(actionsRow);
 //# sourceMappingURL=firebase-auth-compat.js.map
 </script>
 <script>
-firebase.initializeApp({
+const _mihrabAnonymousApp = firebase.initializeApp({
     apiKey: "AIzaSyC828iIVZOZQRGqkt69cg85tB8VQLxR0p8",
     authDomain: "mihrab-leaderboard.firebaseapp.com",
     databaseURL: "https://mihrab-leaderboard-default-rtdb.firebaseio.com",
@@ -6162,11 +6166,12 @@ firebase.initializeApp({
     storageBucket: "mihrab-leaderboard.firebasestorage.app",
     messagingSenderId: "791618163486",
     appId: "1:791618163486:web:4afe02716d3fd5b99d6f0f"
-});
-const _fbDb = firebase.database();
+}, 'MihrabPlannerAnonymous');
+const _fbDb = _mihrabAnonymousApp.database();
+const _fbAuth = _mihrabAnonymousApp.auth();
 
 // === تسجيل دخول مجهول (Anonymous) لتفعيل صلاحية الكتابة حسب قواعد الحماية الجديدة ===
-firebase.auth().signInAnonymously().catch(err => {
+_fbAuth.signInAnonymously().catch(err => {
     console.error("Firebase Anonymous Auth error:", err);
 });
 function formatLocalDateKey(date) {
@@ -6730,7 +6735,7 @@ window.runStageHistoryAutoMigration = function() {
     if (_stageHistoryAutoMigrationPromise) return _stageHistoryAutoMigrationPromise;
     _stageHistoryAutoMigrationPromise = (async () => {
         if (localStorage.getItem('qp_leaderboard_joined') !== '1') return { skipped:true, reason:'not-joined' };
-        if (!firebase.auth().currentUser) return { skipped:true, reason:'not-authenticated' };
+        if (!_fbAuth.currentUser) return { skipped:true, reason:'not-authenticated' };
 
         const programId = _stageHistorySafeKey(PROG.programId || 'legacy');
         const migrationKey = `v4_${programId}`;
@@ -6857,7 +6862,7 @@ window.openStudentLeaderboard = async function({ join = false } = {}) {
     }
 };
 
-firebase.auth().onAuthStateChanged(user => {
+_fbAuth.onAuthStateChanged(user => {
     if (user) {
         window.runStageHistoryAutoMigration();
         if (typeof window.resolveSchoolAssignment === 'function') {
