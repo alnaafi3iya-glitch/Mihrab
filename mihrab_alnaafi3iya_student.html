@@ -3733,6 +3733,8 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
                     originalMfHizbMilestones.push({
                         hizb,
                         completedUnitCount: offset + 1,
+                        rangeStartPage: Math.max(HIZB_START_PAGES[hizb - 1], unitFirstRealPage(startMfIndex, S.dailyUnit)),
+                        rangeEndPage: unitLastRealPage(absIndex, S.dailyUnit),
                         isTerminalPartial: offset === totalBaseMfUnits - 1 &&
                             unitLastRealPage(absIndex, S.dailyUnit) < (hizb < 60 ? HIZB_START_PAGES[hizb] - 1 : 604)
                     });
@@ -4662,8 +4664,9 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                 const isTail = item.elapsed <= NEW_REVIEW_TAIL_REPS;
                                 const fullLong = `حزب ${item.hizb}`;
                                 const fullShort = `ح${item.hizb}`;
+                                const terminalRangeLabel = `من ص${item.rangeStartPage} إلى ص${item.rangeEndPage}`;
                                 const label = item.isTerminalPartial
-                                    ? (isTail ? 'النصف الأخير من النطاق — يُكرّر مرتين' : 'النطاق الختامي كاملًا')
+                                    ? (isTail ? `${terminalRangeLabel} — يُكرّر مرتين` : terminalRangeLabel)
                                     : (isTail ? `نصف 2/ح${item.hizb} — يُكرّر مرتين` : fullShort);
                                 if (isTail) activeTailLabelsByHizb.set(item.hizb, label);
                                 const current = String(mfCumulativeTextFinal || '');
@@ -4695,7 +4698,9 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                     .split(' + ')
                                     .filter(part => part !== `حزب ${item.hizb}` && part !== `ح${item.hizb}`);
                                 mfCumulativeTextFinal = parts.join(' + ') || null;
-                                const masteredLabel = item.isTerminalPartial ? 'النطاق الختامي' : `ح${item.hizb}`;
+                                const masteredLabel = item.isTerminalPartial
+                                    ? `من ص${item.rangeStartPage} إلى ص${item.rangeEndPage}`
+                                    : `ح${item.hizb}`;
                                 if (!String(mutqanText || '').includes(masteredLabel)) {
                                     mutqanText = mutqanText && mutqanText !== '—'
                                         ? `${mutqanText}<br><span class="text-indigo-700">+ ${masteredLabel}</span>`
@@ -4716,7 +4721,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                     ? Number(String(segment.label).match(/\d+/)?.[0])
                                     : null;
                                 return Number.isInteger(segmentHizb) && activeTailLabelsByHizb.has(segmentHizb)
-                                    ? { type: 'partial', label: activeTailLabelsByHizb.get(segmentHizb) }
+                                    ? { type: 'original-mf-tail', label: activeTailLabelsByHizb.get(segmentHizb) }
                                     : segment;
                             });
                         }
@@ -6105,7 +6110,7 @@ else if (S.step === 8) {
                     h += `<td class="p-2 border-l border-slate-200">` +
                         (cellEmpty ? `<div class="text-slate-400">—</div>` : "") +
                         (cellHasWard ? `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletWard')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletWard')}</button><span class="font-bold text-teal-950 text-[12px] leading-normal px-1.5 py-0.5 rounded-md border border-teal-300" style="background:#ccfbf1;">${r.mutfalet}${r.mfSurahName ? ` <span class="font-normal text-[10px] text-teal-700">(${r.mfSurahName})</span>` : ""}</span></div>` : "") +
-                        (cellHasCumul ? `<div class="flex items-center gap-1.5 mt-1"><button onclick="toggleTrack(${r.day}, 'mutfaletCumul')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletCumul')}</button><span class="text-[9px] text-slate-500">📍 ${Array.isArray(r.mfCumulativeSegments) ? r.mfCumulativeSegments.map((part, index) => `${index ? '<span class=\"mx-0.5 text-slate-400\">+</span>' : ''}<span class=\"inline-block px-1.5 py-0.5 rounded-md border font-bold ${part.type === 'hizb' ? 'bg-violet-100 border-violet-300 text-violet-800' : 'bg-teal-100 border-teal-300 text-teal-800'}\">${part.label}</span>`).join('') : r.mfCumulativeText}</span></div>` : "") +
+                        (cellHasCumul ? `<div class="flex items-center gap-1.5 mt-1"><button onclick="toggleTrack(${r.day}, 'mutfaletCumul')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletCumul')}</button><span class="text-[9px] text-slate-500">📍 ${Array.isArray(r.mfCumulativeSegments) ? r.mfCumulativeSegments.map((part, index) => `${index ? '<span class=\"mx-0.5 text-slate-400\">+</span>' : ''}<span class=\"inline-block px-1.5 py-0.5 rounded-md border font-bold ${part.type === 'hizb' ? 'bg-violet-100 border-violet-300 text-violet-800' : part.type === 'original-mf-tail' ? '' : 'bg-teal-100 border-teal-300 text-teal-800'}\"${part.type === 'original-mf-tail' ? ' style=\"background:#fff7ed;border-color:#fdba74;color:#c2410c;\"' : ''}>${part.label}</span>`).join('') : r.mfCumulativeText}</span></div>` : "") +
                         (r.mfFinishedNote ? `<div class="text-[9px] text-emerald-700 font-bold mt-1">${r.mfFinishedNote}</div>` : "") +
                         (cellHasNewHizb ? `<hr class="my-1.5 border-slate-200"/>` +
                             `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletNewHizb')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletNewHizb')}</button><span class="font-bold text-amber-700 text-[11px] leading-normal">${r.mfAddedIsCarryRange ? `من ص${r.mfAddedRange.start} إلى ص${r.mfAddedRange.end}` : `${r.mfAddedRange ? `من ص${r.mfAddedRange.start} إلى ص${r.mfAddedRange.end} ` : ""}الحزب ${r.mfAddedHizb}${r.mfAddedSurah ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfAddedSurah})</span>` : ""}`}</span></div>` : "") +
