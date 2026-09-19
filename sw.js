@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'mihrab-cache-';
-const CACHE_NAME = `${CACHE_PREFIX}v120`;
+const CACHE_NAME = `${CACHE_PREFIX}v121`;
 
 // أسماء مؤكدة من ملفي التثبيت وصفحة الإدارة المرفقة.
 // يُحفظ كل ملف بصورة مستقلة حتى لا يمنع ملف مفقود حفظ بقية التطبيق.
