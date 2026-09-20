@@ -551,6 +551,8 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
             return !!S.hasNew && S.newReviewEnabled !== false;
         }
 
+        // نسخة المعلمة: التخطيط هو العرض الافتراضي، ويمكن إظهار التوزيع
+        // الفعلي المبني على الإنجاز دون تغيير قواعد الإنجاز نفسها.
         function isPlannedDistributionView() {
             return (PROG.teacherDistributionView || 'planned') === 'planned';
         }
@@ -558,14 +560,12 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
         window._viewingLiveStudentData = false;
         window._teacherOwnTrackingBackup = null;
         window._teacherOwnStationsBackup = null;
-        window._teacherOwnWeekBackup = null;
         window._liveStudentDataInfo = null;
 
         function restoreTeacherOwnDataIfNeeded() {
             if (window._viewingLiveStudentData) {
                 TRACKING = window._teacherOwnTrackingBackup || TRACKING;
                 stations = window._teacherOwnStationsBackup || stations;
-                if (Number.isInteger(window._teacherOwnWeekBackup)) PROG.week = window._teacherOwnWeekBackup;
                 window._viewingLiveStudentData = false;
             }
             window._liveStudentDataInfo = null;
@@ -589,7 +589,6 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
                 if (!window._viewingLiveStudentData) {
                     window._teacherOwnTrackingBackup = TRACKING;
                     window._teacherOwnStationsBackup = stations;
-                    window._teacherOwnWeekBackup = PROG.week;
                 }
                 TRACKING = remote.TRACKING || {};
                 if (Array.isArray(remote.stations)) stations = remote.stations;
@@ -613,64 +612,67 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
             }
             render();
         }
-
-        function getNewMemBaseIndex() {
-            return getStartingAbsIndex(S.newStartUnit, S.newStartFrom, S.newDailyUnit, S.newStartFromQuarter);
+        // نسخة المعلمة: التخطيط هو العرض الافتراضي، ويمكن إظهار التوزيع
+        // الفعلي المبني على الإنجاز دون تغيير قواعد الإنجاز نفسها.
+        function isPlannedDistributionView() {
+            return (PROG.teacherDistributionView || 'planned') === 'planned';
         }
 
-        function getNewMemPlannedDays() {
-            const orderedDays = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-            return orderedDays.map((name, index) => ({ name, day: index + 1 }))
-                .filter(item => Array.isArray(S.newDays) && S.newDays.includes(item.name));
-        }
+        window._viewingLiveStudentData = false;
+        window._teacherOwnTrackingBackup = null;
+        window._teacherOwnStationsBackup = null;
+        window._liveStudentDataInfo = null;
 
-        function getNewMemPlannedAdvanceCount(week, upToDay = 6) {
-            if (!isNewMemIntakeEnabled() || week < 1) return 0;
-            let count = 0;
-            for (const item of getNewMemPlannedDays()) {
-                if (item.day > upToDay) break;
-                if (isPlannedDistributionView()) { count++; continue; }
-                if (getTrackStatus(week, item.day, 'newMem') !== 'done') break;
-                count++;
+        function restoreTeacherOwnDataIfNeeded() {
+            if (window._viewingLiveStudentData) {
+                TRACKING = window._teacherOwnTrackingBackup || TRACKING;
+                stations = window._teacherOwnStationsBackup || stations;
+                window._viewingLiveStudentData = false;
             }
-            return count;
+            window._liveStudentDataInfo = null;
         }
 
-        function getNewMemWeekStartIndex(week) {
-            let index = getNewMemBaseIndex();
-            for (let w = 1; w < Math.max(1, week); w++) index += getNewMemPlannedAdvanceCount(w);
-            const totalTo = parseInt(S.totalTo, 10);
-            if (Number.isInteger(totalTo) && totalTo >= 1) {
-                const unitsPerHizb = UNITS_PER_HIZB[S.newDailyUnit] || 8;
-                index = Math.min(index, totalTo * unitsPerHizb - 1);
+        async function loadLiveStudentActualData() {
+            const studentName = String(S?.programName || '').trim();
+            const fbRef = (typeof window !== 'undefined' && window._fbDb) ? window._fbDb : (typeof _fbDb !== 'undefined' ? _fbDb : undefined);
+            if (!studentName || typeof fbRef === 'undefined') {
+                window._liveStudentDataInfo = { found: false, reason: 'no-connection' };
+                return;
             }
-            return index;
-        }
-
-        function getNewReviewEndIndexForDay(week, day) {
-            const startIndex = getNewMemWeekStartIndex(week);
-            let included = 0;
-            for (const item of getNewMemPlannedDays()) {
-                if (item.day >= day) break;
-                if (isPlannedDistributionView()) { included++; continue; }
-                if (getTrackStatus(week, item.day, 'newMem') !== 'done') break;
-                included++;
+            const key = studentName.replace(/[.#$[\]]/g, '_');
+            try {
+                const snapshot = await fbRef.ref('student_full_tracking/' + key).once('value');
+                const remote = snapshot.val();
+                if (!remote || !remote.TRACKING) {
+                    window._liveStudentDataInfo = { found: false, reason: 'no-data' };
+                    return;
+                }
+                if (!window._viewingLiveStudentData) {
+                    window._teacherOwnTrackingBackup = TRACKING;
+                    window._teacherOwnStationsBackup = stations;
+                }
+                TRACKING = remote.TRACKING || {};
+                if (Array.isArray(remote.stations)) stations = remote.stations;
+                if (Number.isInteger(remote.PROG && remote.PROG.week)) PROG.week = remote.PROG.week;
+                window._viewingLiveStudentData = true;
+                window._liveStudentDataInfo = { found: true, fetchedAt: remote.lastUpdate || null };
+            } catch (e) {
+                console.warn('تعذّر جلب بيانات الطالبة الحقيقية:', e);
+                window._liveStudentDataInfo = { found: false, reason: 'error' };
             }
-            return included > 0 ? startIndex + included - 1 : startIndex - 1;
         }
 
-        function getTrackPositionForGlobalDay(globalDay) {
-            const activeDays = getDisplayActiveDays();
-            const shifted = globalDay + getProgramInitialBlankDays();
-            return { week: Math.floor((shifted - 1) / activeDays) + 1, day: ((shifted - 1) % activeDays) + 1 };
+        async function setTeacherDistributionView(mode) {
+            if (mode === 'actual') {
+                PROG.teacherDistributionView = 'actual';
+                await loadLiveStudentActualData();
+            } else {
+                restoreTeacherOwnDataIfNeeded();
+                PROG.teacherDistributionView = 'planned';
+                saveState();
+            }
+            render();
         }
-
-        function isSequentialTrackDayBlocked(day, col, rows) {
-            if (!['newMem', 'mutfaletWard', 'mutfaletNewHizb'].includes(col)) return false;
-            return rows.filter(row => !row.isBuffer && row.day < day && isTrackableCell(row, col))
-                .some(row => getTrackStatus(PROG.week, row.day, col) !== 'done');
-        }
-
         function getNewMemPauseGlobalDay() {
             const activeDays = getDisplayActiveDays();
             const initialBlankDays = getProgramInitialBlankDays();
@@ -889,7 +891,7 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
             catch (e) { return {}; }
         }
 
-        function saveState(runtimeSourceOverride = null) {
+                function saveState(runtimeSourceOverride = null) {
             if (window._viewingLiveStudentData) {
                 console.warn('تم تجاهل saveState: العرض الحالي بيانات طالبة حقيقية مؤقتة، لا بيانات المعلمة المحلية.');
                 return;
@@ -3622,22 +3624,14 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
         function getMfTimelineUnitsBeforeDay(globalDay, activeDaysPerWeek, mfDayLimit) {
             const epoch = Number.isInteger(PROG.mfEpochGlobalDay) ? PROG.mfEpochGlobalDay : 0;
             if (globalDay <= epoch + 1) return 0;
-            const targetPosition = getTrackPositionForGlobalDay(globalDay);
             let count = 0;
-            const stoppedWeeks = new Set();
             for (let d = epoch + 1; d < globalDay; d++) {
-                if (!isMfEligibleGlobalDay(d, activeDaysPerWeek, mfDayLimit) || isOriginalMfPausedOn(d)) continue;
-                const position = getTrackPositionForGlobalDay(d);
-                if (position.week === targetPosition.week || isPlannedDistributionView()) {
+                if (
+                    isMfEligibleGlobalDay(d, activeDaysPerWeek, mfDayLimit) &&
+                    !isOriginalMfPausedOn(d)
+                ) {
                     count++;
-                    continue;
                 }
-                if (stoppedWeeks.has(position.week)) continue;
-                if (getTrackStatus(position.week, position.day, 'mutfaletWard') !== 'done') {
-                    stoppedWeeks.add(position.week);
-                    continue;
-                }
-                count++;
             }
             return count;
         }
@@ -3768,16 +3762,14 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
                     originalMfHizbMilestones.push({
                         hizb,
                         completedUnitCount: offset + 1,
-                        rangeStartPage: Math.max(HIZB_START_PAGES[hizb - 1], unitFirstRealPage(startMfIndex, S.dailyUnit)),
-                        rangeEndPage: unitLastRealPage(absIndex, S.dailyUnit),
                         isTerminalPartial: offset === totalBaseMfUnits - 1 &&
                             unitLastRealPage(absIndex, S.dailyUnit) < (hizb < 60 ? HIZB_START_PAGES[hizb] - 1 : 604)
                     });
                 }
             }
 
-            let newMemIndex = isNewReviewEnabled() ? getNewMemWeekStartIndex(1) : 0;
-            let startNewMemIndex = isNewReviewEnabled() ? getNewMemBaseIndex() : 0;
+            let newMemIndex = isNewReviewEnabled() ? getStartingAbsIndex(S.newStartUnit, S.newStartFrom, S.newDailyUnit, S.newStartFromQuarter) : 0;
+            let startNewMemIndex = newMemIndex;
             const programStartPage = unitFirstRealPage(startNewMemIndex, S.newDailyUnit);
             let uPerHizbNew = UNITS_PER_HIZB[S.newDailyUnit] || 1;
 
@@ -4048,10 +4040,36 @@ let cumStartIndex = (() => {
                     const intakeActiveToday = pauseGlobalDay !== null
                         ? g < pauseGlobalDay
                         : isNewMemIntakeEnabled();
-                    let dWeek = (g - 1 + initialBlankDays) % activeDays;
-                    const planWeek = Math.floor((g - 1 + initialBlankDays) / activeDays) + 1;
-                    if (g === 1 || dWeek === 0) newMemIndex = getNewMemWeekStartIndex(planWeek);
+                                                            let dWeek = (g - 1 + initialBlankDays) % activeDays;
                     let isMemDay = intakeActiveToday && S.newDays.includes(getDayNameByOffset(dWeek));
+                    if (isMemDay && !isPlannedDistributionView()) {
+                        const weekFirstGlobalDayForCheck = g - dWeek;
+                        const curWeekNumForCheck = Math.floor((g - 1 + initialBlankDays) / activeDays) + 1;
+                        let _priorDaysAllDone = true;
+                        for (let _d = 1; _d <= dWeek; _d++) {
+                            const _histGlobalDay = weekFirstGlobalDayForCheck + (_d - 1);
+                            const _histIntakeActive = pauseGlobalDay !== null ? _histGlobalDay < pauseGlobalDay : isNewMemIntakeEnabled();
+                            if (!_histIntakeActive || !S.newDays.includes(getDayNameByOffset(_d - 1))) continue;
+                            if (getTrackStatus(curWeekNumForCheck, _d, 'newMem') !== 'done') { _priorDaysAllDone = false; break; }
+                        }
+                        if (!_priorDaysAllDone) isMemDay = false;
+                    }
+                    // === توزيع فعلي (مُكيَّف من منطق mihrab_full_v016): في وضع "الفعلي" فقط،
+                    // لا يُحتسب يوم حفظ جديد متقدّمًا إلا إذا كانت كل أيام الحفظ الجديد السابقة
+                    // له ضمن نفس الأسبوع مُنجَزة فعليًا (TRACKING = 'done'). يتوقف التقدّم عند أول
+                    // فجوة حقيقية داخل الأسبوع فقط — لا يمسّ حساب "المخطط" إطلاقًا.
+                    if (isMemDay && !isPlannedDistributionView()) {
+                        const weekFirstGlobalDayForCheck = g - dWeek;
+                        const curWeekNumForCheck = Math.floor((g - 1 + initialBlankDays) / activeDays) + 1;
+                        let _priorDaysAllDone = true;
+                        for (let _d = 1; _d <= dWeek; _d++) {
+                            const _histGlobalDay = weekFirstGlobalDayForCheck + (_d - 1);
+                            const _histIntakeActive = pauseGlobalDay !== null ? _histGlobalDay < pauseGlobalDay : isNewMemIntakeEnabled();
+                            if (!_histIntakeActive || !S.newDays.includes(getDayNameByOffset(_d - 1))) continue;
+                            if (getTrackStatus(curWeekNumForCheck, _d, 'newMem') !== 'done') { _priorDaysAllDone = false; break; }
+                        }
+                        if (!_priorDaysAllDone) isMemDay = false;
+                    }
                     if (dWeek === activeDays - 1) { 
                         const weekFirstGlobalDay = g - dWeek;
                         let unitsSaved = 0;
@@ -4066,12 +4084,10 @@ let cumStartIndex = (() => {
                                 S.newDays.includes(getDayNameByOffset(weekOffset))
                             ) unitsSaved++;
                         }
-                        const startOfThisWeek = getNewMemWeekStartIndex(planWeek);
-                        const weeklyReviewEnd = getNewReviewEndIndexForDay(planWeek, activeDays);
-                        unitsSaved = Math.max(0, weeklyReviewEnd - startOfThisWeek + 1);
                         let weeklyRev = "";
                         if (unitsSaved > 0) {
-                            weeklyRev = `<span class="text-[10.5px] text-teal-700 font-bold">مراجعة الأسبوع ×3</span><br/><span class="text-slate-600">${formatDiscreteRange(startOfThisWeek, weeklyReviewEnd, S.newDailyUnit)}</span>`;
+                            let startOfThisWeek = Math.max(startNewMemIndex, newMemIndex - unitsSaved);
+                            weeklyRev = `<span class="text-[10.5px] text-teal-700 font-bold">مراجعة الأسبوع ×3</span><br/><span class="text-slate-600">${formatDiscreteRange(startOfThisWeek, newMemIndex - 1, S.newDailyUnit)}</span>`;
                         }
                         // التعديل 2: دمج "تثبيت الحزب" مع "مراجعة الأسبوع" في يوم السبت دون أن يحذف أحدهما الآخر
                         nRevText = fixStr ? `${fixStr}${weeklyRev ? '<hr class="my-1.5 border-emerald-100"/>' + weeklyRev : ''}` : (weeklyRev || "—");
@@ -4703,9 +4719,8 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                 const isTail = item.elapsed <= NEW_REVIEW_TAIL_REPS;
                                 const fullLong = `حزب ${item.hizb}`;
                                 const fullShort = `ح${item.hizb}`;
-                                const terminalRangeLabel = `من ص${item.rangeStartPage} إلى ص${item.rangeEndPage}`;
                                 const label = item.isTerminalPartial
-                                    ? (isTail ? `${terminalRangeLabel} — يُكرّر مرتين` : terminalRangeLabel)
+                                    ? (isTail ? 'النصف الأخير من النطاق — يُكرّر مرتين' : 'النطاق الختامي كاملًا')
                                     : (isTail ? `نصف 2/ح${item.hizb} — يُكرّر مرتين` : fullShort);
                                 if (isTail) activeTailLabelsByHizb.set(item.hizb, label);
                                 const current = String(mfCumulativeTextFinal || '');
@@ -4737,9 +4752,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                     .split(' + ')
                                     .filter(part => part !== `حزب ${item.hizb}` && part !== `ح${item.hizb}`);
                                 mfCumulativeTextFinal = parts.join(' + ') || null;
-                                const masteredLabel = item.isTerminalPartial
-                                    ? `من ص${item.rangeStartPage} إلى ص${item.rangeEndPage}`
-                                    : `ح${item.hizb}`;
+                                const masteredLabel = item.isTerminalPartial ? 'النطاق الختامي' : `ح${item.hizb}`;
                                 if (!String(mutqanText || '').includes(masteredLabel)) {
                                     mutqanText = mutqanText && mutqanText !== '—'
                                         ? `${mutqanText}<br><span class="text-indigo-700">+ ${masteredLabel}</span>`
@@ -4760,7 +4773,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                     ? Number(String(segment.label).match(/\d+/)?.[0])
                                     : null;
                                 return Number.isInteger(segmentHizb) && activeTailLabelsByHizb.has(segmentHizb)
-                                    ? { type: 'original-mf-tail', label: activeTailLabelsByHizb.get(segmentHizb) }
+                                    ? { type: 'partial', label: activeTailLabelsByHizb.get(segmentHizb) }
                                     : segment;
                             });
                         }
@@ -4903,10 +4916,10 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                 const rowDate = new Date(base.getTime()); rowDate.setDate(base.getDate() + (PROG.week - 1) * getDisplayCycleDays() + (r.day - 1));
                 if (rowDate.toDateString() === new Date().toDateString()) {
                     if (isTrackableCell(r, 'mutqan')) setTrackStatus(PROG.week, r.day, 'mutqan', 'done');
-                    if (isTrackableCell(r, 'mutfaletWard') && !isSequentialTrackDayBlocked(r.day, 'mutfaletWard', rows)) setTrackStatus(PROG.week, r.day, 'mutfaletWard', 'done');
+                    if (isTrackableCell(r, 'mutfaletWard')) setTrackStatus(PROG.week, r.day, 'mutfaletWard', 'done');
                     if (isTrackableCell(r, 'mutfaletCumul')) setTrackStatus(PROG.week, r.day, 'mutfaletCumul', 'done');
-                    if (isTrackableCell(r, 'mutfaletNewHizb') && !isSequentialTrackDayBlocked(r.day, 'mutfaletNewHizb', rows)) setTrackStatus(PROG.week, r.day, 'mutfaletNewHizb', 'done');
-                    if (isTrackableCell(r, 'newMem') && !isSequentialTrackDayBlocked(r.day, 'newMem', rows)) setTrackStatus(PROG.week, r.day, 'newMem', 'done');
+                    if (isTrackableCell(r, 'mutfaletNewHizb')) setTrackStatus(PROG.week, r.day, 'mutfaletNewHizb', 'done');
+                    if (isTrackableCell(r, 'newMem')) setTrackStatus(PROG.week, r.day, 'newMem', 'done');
                     if (isTrackableCell(r, 'newReview')) setTrackStatus(PROG.week, r.day, 'newReview', 'done');
                 }
             });
@@ -4944,16 +4957,8 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
         }
 
         function toggleTrack(day, col) {
-            const rows = generateWeekSchedule();
-            const row = rows.find(r => !r.isBuffer && r.day === day);
+            const row = generateWeekSchedule().find(r => !r.isBuffer && r.day === day);
             if (!isTrackableCell(row, col)) return;
-            if (isSequentialTrackDayBlocked(day, col, rows)) {
-                const current = getTrackStatus(PROG.week, day, col);
-                if (current === 'skip') setTrackStatus(PROG.week, day, col, null);
-                else setTrackStatus(PROG.week, day, col, 'skip');
-                saveState(); render();
-                return;
-            }
             const current = getTrackStatus(PROG.week, day, col);
             if (!current) setTrackStatus(PROG.week, day, col, 'done');
             else if (current === 'done') setTrackStatus(PROG.week, day, col, 'skip');
@@ -6040,24 +6045,24 @@ else if (S.step === 8) {
                 </div>
                 <div class="mb-4 w-full"><div style="display:grid;grid-template-columns:repeat(${bars.length},1fr);gap:8px;">${bars.join('')}</div></div>                
                 ${stations.length > 0 ? renderJourneyStripHtml() : ''}
-                <div class="w-full grid grid-cols-2 gap-3 mb-6">
+                <div class="w-full grid grid-cols-2 gap-3 mb-1">
                     <button onclick="exportDataToFile()" class="py-3 bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 rounded-xl hover:bg-emerald-100 transition text-xs flex items-center justify-center gap-2">💾 حفظ نسخة من البرنامج</button>
                     <button onclick="openRulesModal()" class="py-3 bg-teal-50 text-teal-700 font-bold border border-teal-200 rounded-xl hover:bg-teal-100 transition text-xs flex items-center justify-center gap-2">📖 شرح النظام</button>
                 </div>
                 <div class="w-full bg-white border border-slate-200 rounded-2xl p-2 mb-3 shadow-sm">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;" role="group" aria-label="طريقة عرض توزيع الأسابيع">
-                        <button onclick="setTeacherDistributionView('planned')" aria-pressed="${isPlannedDistributionView()}" style="padding:9px 8px;border-radius:11px;font-size:11px;font-weight:800;border:1px solid ${isPlannedDistributionView() ? '#047857' : '#e2e8f0'};background:${isPlannedDistributionView() ? '#ecfdf5' : '#fff'};color:${isPlannedDistributionView() ? '#047857' : '#64748b'};">📅 التوزيع المخطط</button>
+                        <button onclick="setTeacherDistributionView('planned')" aria-pressed="${isPlannedDistributionView()}" style="padding:9px 8px;border-radius:11px;font-size:11px;font-weight:800;border:1px solid ${isPlannedDistributionView() ? '#047857' : '#e2e8f0'};background:${isPlannedDistributionView() ? '#ecfdf5' : '#fff'};color:${isPlannedDistributionView() ? '#c9740c' : '#64748b'};">📅 التوزيع المخطط</button>
                         <button onclick="setTeacherDistributionView('actual')" aria-pressed="${!isPlannedDistributionView()}" style="padding:9px 8px;border-radius:11px;font-size:11px;font-weight:800;border:1px solid ${!isPlannedDistributionView() ? '#047857' : '#e2e8f0'};background:${!isPlannedDistributionView() ? '#ecfdf5' : '#fff'};color:${!isPlannedDistributionView() ? '#047857' : '#64748b'};">✅ التوزيع الفعلي</button>
                     </div>
-                    <div style="margin-top:6px;text-align:center;font-size:9px;font-weight:700;color:#64748b;">${isPlannedDistributionView() ? 'معاينة الخطة كاملة دون اشتراط الإنجاز' : 'التوزيع بحسب الإنجاز المتتابع الحقيقي'}</div>
+                    <div style="margin-top:1px;text-align:center;font-size:9px;font-weight:700;color:#64748b;">${isPlannedDistributionView() ? 'معاينة الخطة كاملة دون اشتراط الإنجاز' : 'التوزيع بحسب الإنجاز المتتابع الحقيقي'}</div>
                     ${(!isPlannedDistributionView() && window._liveStudentDataInfo) ? (
                         window._liveStudentDataInfo.found
-                            ? `<div style="margin-top:4px;text-align:center;font-size:9px;font-weight:800;color:#047857;">✅ بيانات الطالبة الحقيقية المستلمة${window._liveStudentDataInfo.fetchedAt ? ' — آخر تحديث: ' + new Date(window._liveStudentDataInfo.fetchedAt).toLocaleString('ar') : ''}</div>`
-                            : `<div style="margin-top:4px;text-align:center;font-size:9px;font-weight:800;color:#b45309;">⚠️ تعذّر جلب بيانات الطالبة الحقيقية (${window._liveStudentDataInfo.reason === 'no-data' ? 'لم تُرسِل الطالبة بيانات بعد' : window._liveStudentDataInfo.reason === 'no-connection' ? 'لا يوجد اتصال' : 'خطأ في الجلب'}) — المعروض حسابٌ محلي فقط</div>`
+                            ? `<div style="margin-top:4px;text-align:center;font-size:9px;font-weight:800;color:#047857;">✅ بيانات الطالبة الحقيقية المستلمة${window._liveStudentDataInfo.fetchedAt ? ' — آخر تحديث: ' + new Date(window._liveStudentDataInfo.fetchedAt).toLocaleString('ar') : ''} <button onclick="setTeacherDistributionView('actual')" style="margin-inline-start:6px;padding:2px 8px;border-radius:8px;border:1px solid #047857;background:#fff;color:#047857;font-size:9px;font-weight:800;cursor:pointer;">🔄 تحديث الآن</button></div>`
+                            : `<div style="margin-top:4px;text-align:center;font-size:9px;font-weight:800;color:#b45309;">⚠️ تعذّر جلب بيانات الطالبة الحقيقية (${window._liveStudentDataInfo.reason === 'no-data' ? 'لم تُرسِل الطالبة بيانات بعد' : window._liveStudentDataInfo.reason === 'no-connection' ? 'لا يوجد اتصال' : 'خطأ في الجلب'}) — المعروض حسابٌ محلي فقط <button onclick="setTeacherDistributionView('actual')" style="margin-inline-start:6px;padding:2px 8px;border-radius:8px;border:1px solid #b45309;background:#fff;color:#b45309;font-size:9px;font-weight:800;cursor:pointer;">🔄 إعادة المحاولة</button></div>`
                     ) : ''}
                 </div>
-                
                 <div class="w-full bg-white border border-slate-200 rounded-2xl shadow-sm mb-3" style="width:100%;overflow-x:auto;box-sizing:border-box;" id="tbl-wrapper"></div>
+                                
                 <div class="w-full flex justify-between items-center gap-2 bg-white border border-slate-200 p-3 rounded-2xl shadow-sm mb-3">
                     <button onclick="prevWeek()" class="flex-1 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition disabled:opacity-40 text-center" ${PROG.week <= 1 ? "disabled" : ""}>← السابق</button>
                     <button onclick="openWeekJumpModal()" title="الانتقال إلى أسبوع آخر" class="flex-1 py-1.5 px-2 rounded-xl border border-emerald-200 bg-emerald-50/50 text-center hover:bg-emerald-50 transition">
@@ -6138,7 +6143,7 @@ else if (S.step === 8) {
                     h += `<td class="p-2 border-l border-slate-200">` +
                         (cellEmpty ? `<div class="text-slate-400">—</div>` : "") +
                         (cellHasWard ? `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletWard')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletWard')}</button><span class="font-bold text-teal-950 text-[12px] leading-normal px-1.5 py-0.5 rounded-md border border-teal-300" style="background:#ccfbf1;">${r.mutfalet}${r.mfSurahName ? ` <span class="font-normal text-[10px] text-teal-700">(${r.mfSurahName})</span>` : ""}</span></div>` : "") +
-                        (cellHasCumul ? `<div class="flex items-center gap-1.5 mt-1"><button onclick="toggleTrack(${r.day}, 'mutfaletCumul')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletCumul')}</button><span class="text-[9px] text-slate-500">📍 ${Array.isArray(r.mfCumulativeSegments) ? r.mfCumulativeSegments.map((part, index) => `${index ? '<span class=\"mx-0.5 text-slate-400\">+</span>' : ''}<span class=\"inline-block px-1.5 py-0.5 rounded-md border font-bold ${part.type === 'hizb' ? 'bg-violet-100 border-violet-300 text-violet-800' : part.type === 'original-mf-tail' ? '' : 'bg-teal-100 border-teal-300 text-teal-800'}\"${part.type === 'original-mf-tail' ? ' style=\"background:#fff7ed;border-color:#fdba74;color:#c2410c;\"' : ''}>${part.label}</span>`).join('') : r.mfCumulativeText}</span></div>` : "") +
+                        (cellHasCumul ? `<div class="flex items-center gap-1.5 mt-1"><button onclick="toggleTrack(${r.day}, 'mutfaletCumul')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletCumul')}</button><span class="text-[9px] text-slate-500">📍 ${Array.isArray(r.mfCumulativeSegments) ? r.mfCumulativeSegments.map((part, index) => `${index ? '<span class=\"mx-0.5 text-slate-400\">+</span>' : ''}<span class=\"inline-block px-1.5 py-0.5 rounded-md border font-bold ${part.type === 'hizb' ? 'bg-violet-100 border-violet-300 text-violet-800' : 'bg-teal-100 border-teal-300 text-teal-800'}\">${part.label}</span>`).join('') : r.mfCumulativeText}</span></div>` : "") +
                         (r.mfFinishedNote ? `<div class="text-[9px] text-emerald-700 font-bold mt-1">${r.mfFinishedNote}</div>` : "") +
                         (cellHasNewHizb ? `<hr class="my-1.5 border-slate-200"/>` +
                             `<div class="flex items-center gap-1.5"><button onclick="toggleTrack(${r.day}, 'mutfaletNewHizb')" class="text-base flex-shrink-0">${getTrackEmoji(r.day, 'mutfaletNewHizb')}</button><span class="font-bold text-amber-700 text-[11px] leading-normal">${r.mfAddedIsCarryRange ? `من ص${r.mfAddedRange.start} إلى ص${r.mfAddedRange.end}` : `${r.mfAddedRange ? `من ص${r.mfAddedRange.start} إلى ص${r.mfAddedRange.end} ` : ""}الحزب ${r.mfAddedHizb}${r.mfAddedSurah ? ` <span class="font-normal text-[10px] text-slate-400">(${r.mfAddedSurah})</span>` : ""}`}</span></div>` : "") +
