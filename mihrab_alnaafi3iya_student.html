@@ -4715,7 +4715,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                             const maturedToday = originalMfHizbMilestones.filter(item =>
                                 Number.isInteger(item.completedGlobalDay) &&
                                 item.completedUnitCount > consolidatedMfUnits &&
-                                countMfUnpausedReviewDays(item.completedGlobalDay, globalDay) > ORIGINAL_MF_TOTAL_REPS
+                                countMfUnpausedReviewDays(item.completedGlobalDay, globalDay) === ORIGINAL_MF_TOTAL_REPS + 1
                             );
                             for (const item of maturedToday) {
                                 const parts = String(mfCumulativeTextFinal || '')
