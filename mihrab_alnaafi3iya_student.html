@@ -3592,21 +3592,37 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
 
         // عدد الوحدات المستهلكة فعلياً قبل يوم معيّن، منذ نقطة بداية النطاق الحالي فقط.
         // هذا هو المصدر الوحيد لفهرس الورد والتراكمي ومحاكاة الانتقال إلى المتقن.
+        function getTrackPositionForGlobalDay(globalDay) {
+            const activeDays = getDisplayActiveDays();
+            const shifted = globalDay + getProgramInitialBlankDays();
+            return {
+                week: Math.floor((shifted - 1) / activeDays) + 1,
+                day: ((shifted - 1) % activeDays) + 1
+            };
+        }
+
         function getMfTimelineUnitsBeforeDay(globalDay, activeDaysPerWeek, mfDayLimit) {
             const epoch = Number.isInteger(PROG.mfEpochGlobalDay) ? PROG.mfEpochGlobalDay : 0;
             if (globalDay <= epoch + 1) return 0;
+            const targetPosition = getTrackPositionForGlobalDay(globalDay);
             let count = 0;
+            const stoppedWeeks = new Set();
             for (let d = epoch + 1; d < globalDay; d++) {
-                if (
-                    isMfEligibleGlobalDay(d, activeDaysPerWeek, mfDayLimit) &&
-                    !isOriginalMfPausedOn(d)
-                ) {
+                if (!isMfEligibleGlobalDay(d, activeDaysPerWeek, mfDayLimit) || isOriginalMfPausedOn(d)) continue;
+                const position = getTrackPositionForGlobalDay(d);
+                if (position.week === targetPosition.week) {
                     count++;
+                    continue;
                 }
+                if (stoppedWeeks.has(position.week)) continue;
+                if (getTrackStatus(position.week, position.day, 'mutfaletWard') !== 'done') {
+                    stoppedWeeks.add(position.week);
+                    continue;
+                }
+                count++;
             }
             return count;
         }
-
         function isMfTimelineActiveOn(globalDay, activeDaysPerWeek, mfDayLimit) {
             const epoch = Number.isInteger(PROG.mfEpochGlobalDay) ? PROG.mfEpochGlobalDay : 0;
             return globalDay > epoch &&
@@ -4013,7 +4029,15 @@ let cumStartIndex = (() => {
                     const intakeActiveToday = pauseGlobalDay !== null
                         ? g < pauseGlobalDay
                         : isNewMemIntakeEnabled();
-                    let dWeek = (g - 1 + initialBlankDays) % activeDays;
+                                        let dWeek = (g - 1 + initialBlankDays) % activeDays;
+                    const planWeek = Math.floor((g - 1 + initialBlankDays) / activeDays) + 1;
+                    // === MIH-006/OBS-13 (منقول من mihrab_student_v009، مُصحَّح 2026-09-20): يُعاد
+                    // ضبط فهرس الحفظ الجديد في بداية كل أسبوع (الاثنين) إلى مجموع إنجاز كل
+                    // الأسابيع السابقة كلٍّ على حدة — لا تجميد دائم عابر للأسابيع، وكل أسبوع
+                    // يتوقف عند أول فجوة حقيقية داخله فقط (نفس getNewMemWeekStartIndex في v009).
+                    if (g === 1 || dWeek === 0) {
+                        newMemIndex = getNewMemWeekStartIndexAlnaafi(planWeek);
+                    }
                     let isMemDay = intakeActiveToday && S.newDays.includes(getDayNameByOffset(dWeek));
                     if (dWeek === activeDays - 1) { 
                         const weekFirstGlobalDay = g - dWeek;
@@ -4875,7 +4899,29 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
         }
 
         function getTrackKey(week, day, col) { return `w${week}_d${day}_${col}`; }
-
+                function getNewMemBaseIndexAlnaafi() {
+            return getStartingAbsIndex(S.newStartUnit, S.newStartFrom, S.newDailyUnit, S.newStartFromQuarter);
+        }
+        function getNewMemPlannedDaysAlnaafi() {
+            const orderedDays = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+            return orderedDays.map((name, index) => ({ name, day: index + 1 })).filter(item => Array.isArray(S.newDays) && S.newDays.includes(item.name));
+        }
+        function getNewMemPlannedAdvanceCountAlnaafi(week) {
+            if (!isNewMemIntakeEnabled() || week < 1) return 0;
+            let count = 0;
+            for (const item of getNewMemPlannedDaysAlnaafi()) {
+                if (getTrackStatus(week, item.day, 'newMem') !== 'done') break;
+                count++;
+            }
+            return count;
+        }
+        function getNewMemWeekStartIndexAlnaafi(week) {
+            let index = getNewMemBaseIndexAlnaafi();
+            for (let w = 1; w < Math.max(1, week); w++) {
+                index += getNewMemPlannedAdvanceCountAlnaafi(w);
+            }
+            return index;
+        }
         // توافق قراءة فقط مع ملفات قديمة كانت تسمّي ورد المتفلت "mutfalet".
         // كل كتابة جديدة تستعمل "mutfaletWard" حصراً وتحذف النسخة القديمة المقابلة إن وُجدت.
         function getTrackStatus(week, day, col) {
