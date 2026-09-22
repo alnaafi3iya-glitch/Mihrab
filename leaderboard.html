@@ -271,6 +271,11 @@
             return str.trim().replace(/\s+/g, '_').replace(/[.#$[\]]/g, '');
         }
 
+        function formatLocalDateKey(date = new Date()) {
+            const d = new Date(date);
+            return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
+        }
+
         function resolveDirectStudentGroup() {
             if (!isDirectStudentEntry) return '';
             const studentKey = Object.keys(studentGroupsMap).find(key =>
@@ -564,11 +569,17 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
                     if (sGroupId !== activeScope) continue;
                 }
 
-                // ملف الطالبة يحسب نسبة الحلبة المقيدة باليوم الحالي قبل إرسالها،
-                // لذلك تعرض الحلبة القيمة المنشورة كما هي ولا تعيد تصفيرها بسبب اختلاف
-                // مفتاح الأسبوع (وهو ما كان يخفي النسبة الصحيحة بعد تغيير مرحلة البرنامج
-                // أو عند فتح الحلبة قرب حدّ الانتقال بين أسبوعين).
-                const displayData = s;
+                // الحلبة يومية. إذا كانت آخر نسبة منشورة تخص يوماً سابقاً،
+                // تُعرض النسب صفراً فور بدء اليوم الجديد حتى قبل فتح الطالبة لبرنامجها.
+                const todayKey = formatLocalDateKey();
+                const isTodayRecord = s.dayKey === todayKey;
+                const displayData = isTodayRecord ? s : {
+                    ...s,
+                    weekPct: 0,
+                    mutqanPct: 0,
+                    mutfaletPct: 0,
+                    newPct: (s.newPct === null || s.newPct === undefined) ? s.newPct : 0
+                };
                 filteredStudents.push({ key, ...displayData });
             }
 
