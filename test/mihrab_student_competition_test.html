@@ -5676,6 +5676,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                 }
             });
             saveState(); render();
+            syncStudentTrackingToTeacher();
         }
 
         function getTrackKey(week, day, col) { return `w${week}_d${day}_${col}`; }
@@ -5718,6 +5719,46 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
             if (col === 'mutfaletWard') delete TRACKING[getTrackKey(week, day, 'mutfalet')];
         }
 
+        // مزامنة الإنجاز والجدول الفعلي الظاهر للطالبة — مسار اختبار معزول تمامًا.
+        function syncStudentTrackingToTeacher() {
+            const studentName = String(S?.programName || PROG?.name || '').trim();
+            if (!studentName || typeof _fbDb === 'undefined' || typeof firebase === 'undefined') {
+                return Promise.resolve(false);
+            }
+            const key = studentName.replace(/[.#$[\]]/g, '_');
+            const visibleWeekRows = generateWeekSchedule();
+            const visibleWeekRowsMeta = {};
+            for (const prop of Object.keys(visibleWeekRows)) {
+                if (!/^\d+$/.test(prop)) visibleWeekRowsMeta[prop] = cloneSerializable(visibleWeekRows[prop]);
+            }
+            const payload = {
+                S: cloneSerializable(S),
+                TRACKING: { ...(TRACKING || {}) },
+                PROG: cloneSerializable(PROG),
+                stations: cloneSerializable(stations || []),
+                startDate: PROGRAM_START_DATE ? PROGRAM_START_DATE.toISOString() : null,
+                weekSchedule: {
+                    week: Number(PROG?.week) || 1,
+                    rows: cloneSerializable(Array.from(visibleWeekRows)),
+                    meta: visibleWeekRowsMeta
+                },
+                lastUpdate: firebase.database.ServerValue.TIMESTAMP
+            };
+            const write = () => _fbDb.ref('student_full_tracking_test/' + key).set(payload)
+                .then(() => true)
+                .catch(error => {
+                    console.warn('تعذّر إرسال إنجاز الطالبة للمعلمة:', error);
+                    return false;
+                });
+            const auth = firebase.auth();
+            return auth.currentUser
+                ? write()
+                : auth.signInAnonymously().then(write).catch(error => {
+                    console.warn('تعذّر تسجيل اتصال مزامنة الطالبة:', error);
+                    return false;
+                });
+        }
+
         // الحارس الوحيد لإنشاء مفاتيح التتبّع: لا علامة إنجاز لخانة غير ظاهرة في جدول اليوم.
         function isTrackableCell(row, col) {
             if (!row || row.isBuffer) return false;
@@ -5740,6 +5781,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                 else setTrackStatus(PROG.week, day, col, 'skip');
                 saveState(); render();
                 pushToLeaderboard({ recordActivity: true });
+                syncStudentTrackingToTeacher();
                 alert(col === 'newMem'
                     ? 'يجب إنجاز ورد الحفظ السابق أولاً قبل الانتقال إلى هذا الورد.'
                     : 'يجب إنجاز ورد المتفلت السابق أولاً قبل الانتقال إلى هذا الورد.');
@@ -5751,6 +5793,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
             else setTrackStatus(PROG.week, day, col, null);
             saveState(); render();
             pushToLeaderboard({ recordActivity: true });
+            syncStudentTrackingToTeacher();
             if (col === 'newMem' && getTrackStatus(PROG.week, day, col) === 'done') {
                 const completedHizb = getCompletedHizbForDay(S, PROG, day);
                 if (completedHizb && PROG.lastShownHizb !== completedHizb.hizb) {

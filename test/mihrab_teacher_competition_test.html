@@ -656,17 +656,38 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
         // اتصال، أو الطالبة لم تُرسل بيانات بعد)، نُبقي على الحساب المحلي المعتاد
         // مع تنبيه صريح للمعلمة بدل الادّعاء الصامت بأنها ترى بيانات حقيقية.
         window._viewingLiveStudentData = false;
+        window._teacherOwnSBackup = null;
+        window._teacherOwnProgBackup = null;
         window._teacherOwnTrackingBackup = null;
         window._teacherOwnStationsBackup = null;
+        window._teacherOwnStartDateBackup = null;
         window._liveStudentDataInfo = null;
+        window._liveStudentWeekSchedule = null;
+        window._liveStudentTrackingRef = null;
+        window._liveStudentTrackingHandler = null;
+
+        function stopLiveStudentTrackingListener() {
+            if (window._liveStudentTrackingRef && window._liveStudentTrackingHandler) {
+                window._liveStudentTrackingRef.off('value', window._liveStudentTrackingHandler);
+            }
+            window._liveStudentTrackingRef = null;
+            window._liveStudentTrackingHandler = null;
+        }
 
         function restoreTeacherOwnDataIfNeeded() {
             if (window._viewingLiveStudentData) {
+                S = window._teacherOwnSBackup || S;
+                PROG = window._teacherOwnProgBackup || PROG;
                 TRACKING = window._teacherOwnTrackingBackup || TRACKING;
                 stations = window._teacherOwnStationsBackup || stations;
+                PROGRAM_START_DATE = window._teacherOwnStartDateBackup
+                    ? new Date(window._teacherOwnStartDateBackup)
+                    : null;
                 window._viewingLiveStudentData = false;
             }
+            stopLiveStudentTrackingListener();
             window._liveStudentDataInfo = null;
+            window._liveStudentWeekSchedule = null;
         }
 
         async function loadLiveStudentActualData() {
@@ -677,26 +698,50 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
                 return;
             }
             const key = studentName.replace(/[.#$[\]]/g, '_');
-            try {
-                const snapshot = await fbRef.ref('student_full_tracking/' + key).once('value');
-                const remote = snapshot.val();
-                if (!remote || !remote.TRACKING) {
-                    window._liveStudentDataInfo = { found: false, reason: 'no-data' };
-                    return;
-                }
-                if (!window._viewingLiveStudentData) {
-                    window._teacherOwnTrackingBackup = TRACKING;
-                    window._teacherOwnStationsBackup = stations;
-                }
-                TRACKING = remote.TRACKING || {};
-                if (Array.isArray(remote.stations)) stations = remote.stations;
-                if (Number.isInteger(remote.PROG && remote.PROG.week)) PROG.week = remote.PROG.week;
-                window._viewingLiveStudentData = true;
-                window._liveStudentDataInfo = { found: true, fetchedAt: remote.lastUpdate || null };
-            } catch (e) {
-                console.warn('تعذّر جلب بيانات الطالبة الحقيقية:', e);
-                window._liveStudentDataInfo = { found: false, reason: 'error' };
-            }
+            stopLiveStudentTrackingListener();
+            const trackingRef = fbRef.ref('student_full_tracking_test/' + key);
+            window._liveStudentTrackingRef = trackingRef;
+            await new Promise(resolve => {
+                let firstResponse = true;
+                const finishFirstResponse = () => {
+                    if (!firstResponse) return;
+                    firstResponse = false;
+                    resolve();
+                };
+                window._liveStudentTrackingHandler = snapshot => {
+                    const remote = snapshot.val();
+                    if (!remote || !remote.S || !remote.PROG || !remote.TRACKING || !remote.weekSchedule) {
+                        window._liveStudentDataInfo = { found: false, reason: 'no-data' };
+                        if (!firstResponse && PROG.teacherDistributionView === 'actual') render();
+                        finishFirstResponse();
+                        return;
+                    }
+                    if (!window._viewingLiveStudentData) {
+                        window._teacherOwnSBackup = cloneSerializable(S);
+                        window._teacherOwnProgBackup = cloneSerializable(PROG);
+                        window._teacherOwnTrackingBackup = cloneSerializable(TRACKING);
+                        window._teacherOwnStationsBackup = cloneSerializable(stations || []);
+                        window._teacherOwnStartDateBackup = PROGRAM_START_DATE
+                            ? PROGRAM_START_DATE.toISOString()
+                            : null;
+                    }
+                    S = cloneSerializable(remote.S);
+                    PROG = { ...cloneSerializable(remote.PROG), teacherDistributionView: 'actual' };
+                    TRACKING = cloneSerializable(remote.TRACKING || {});
+                    stations = cloneSerializable(Array.isArray(remote.stations) ? remote.stations : []);
+                    PROGRAM_START_DATE = remote.startDate ? new Date(remote.startDate) : null;
+                    window._liveStudentWeekSchedule = cloneSerializable(remote.weekSchedule);
+                    window._viewingLiveStudentData = true;
+                    window._liveStudentDataInfo = { found: true, fetchedAt: remote.lastUpdate || null };
+                    if (!firstResponse && PROG.teacherDistributionView === 'actual') render();
+                    finishFirstResponse();
+                };
+                trackingRef.on('value', window._liveStudentTrackingHandler, error => {
+                    console.warn('تعذّر جلب بيانات الطالبة الحقيقية:', error);
+                    window._liveStudentDataInfo = { found: false, reason: 'error' };
+                    finishFirstResponse();
+                });
+            });
         }
 
         async function setTeacherDistributionView(mode) {
@@ -4187,6 +4232,18 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
         }
 
         function generateWeekSchedule() {
+            const liveSchedule = window._liveStudentWeekSchedule;
+            if (
+                !isPlannedDistributionView() &&
+                window._viewingLiveStudentData &&
+                liveSchedule &&
+                Number(liveSchedule.week) === Number(PROG.week) &&
+                Array.isArray(liveSchedule.rows)
+            ) {
+                const rows = cloneSerializable(liveSchedule.rows);
+                Object.assign(rows, cloneSerializable(liveSchedule.meta || {}));
+                return rows;
+            }
             const mP = inputToPages(S.mutqanUnit, S.mutqanFrom, S.mutqanTo, S.mutqanFromQuarter, S.mutqanToQuarter);
             const fP = inputToPages(S.mfUnit, S.mfFrom, S.mfTo, S.mfFromQuarter, S.mfToQuarter);
             const hasBaseMutqan = S.hasInitialMutqan !== false && !!mP;
