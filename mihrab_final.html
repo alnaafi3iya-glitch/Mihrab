@@ -7954,7 +7954,7 @@ window.openStudentLeaderboard = async function({ join = false } = {}) {
         if (join) localStorage.setItem('qp_leaderboard_joined', '1');
         localStorage.setItem('qp_leaderboard_student_name', studentName);
         pushToLeaderboard();
-        const destination = './leaderboard.html';
+        const destination = './leaderboard.html?v=20261028-2';
         if (targetWindow) targetWindow.location.href = destination;
         else window.open(destination, '_blank');
         if (join) {

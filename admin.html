@@ -1582,7 +1582,7 @@
                 document.getElementById('th-group-column').innerText = 'تاريخ آخر نشاط';
 
                 menu.innerHTML += `<button id="btn-view-teacher-home" onclick="switchTab('view-teacher-home', 'الرئيسية')" class="${btnClass} ${activeClass}"><i class="fa-solid fa-house w-5 text-center"></i> الرئيسية</button>`;
-                if (!isImpersonating) menu.innerHTML += `<a href="https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?mode=preview&previewGroup=${encodeURIComponent(currentGroupId || '')}" target="_blank" rel="noopener" class="${btnClass}"><i class="fa-solid fa-bolt w-5 text-center"></i> الحلبة مباشر</a>`;
+                if (!isImpersonating) menu.innerHTML += `<a href="https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?v=20261028-2&mode=preview&previewGroup=${encodeURIComponent(currentGroupId || '')}" target="_blank" rel="noopener" class="${btnClass}"><i class="fa-solid fa-bolt w-5 text-center"></i> الحلبة مباشر</a>`;
                 menu.innerHTML += `<button id="btn-view-students" onclick="switchTab('view-students', 'طالباتي')" class="${btnClass}"><i class="fa-solid fa-book-open w-5 text-center"></i> متابعة طالبات الحلقة</button>`;
                 menu.innerHTML += `<button id="btn-view-exams" onclick="openExamCenter()" class="${btnClass}"><i class="fa-solid fa-medal w-5 text-center"></i> الاختبارات <span id="sidebar-exam-due-count" class="mr-auto hidden bg-rose-500 text-white min-w-6 h-6 px-1 rounded-full text-[10px] items-center justify-center">0</span></button>`;
                 menu.innerHTML += `<button id="btn-view-admin-reports" onclick="openTeacherReports()" class="${btnClass}"><i class="fa-solid fa-chart-column w-5 text-center"></i> تقرير الحلقة</button>`;
@@ -1598,7 +1598,7 @@
         // === الحلبة مباشر: معاينة نظيفة كطالبة، بلا كتابة أي بيانات ===
         function openDirectArenaList() {
             const container = document.getElementById('direct-arena-list');
-            const base = 'https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?mode=preview&previewGroup=';
+            const base = 'https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?v=20261028-2&mode=preview&previewGroup=';
             const rowClass = 'flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 transition';
             let rows = `<a href="${base}GENERAL" target="_blank" rel="noopener" class="${rowClass}">
                 <span class="font-bold text-slate-800"><i class="fa-solid fa-globe text-emerald-600 ml-2"></i>الحلبة العامة</span>
@@ -2191,9 +2191,17 @@
 
         function canonicalizeCompetitionAssignments(...sources) {
             const result = {};
+            const priorities = {};
             sources.forEach(source => Object.entries(source || {}).forEach(([rawKey, groupId]) => {
                 const key = normalizeCompetitionStudentKey(rawKey);
-                if (key && typeof groupId === 'string' && groupId) result[key] = groupId;
+                if (!key || typeof groupId !== 'string' || !groupId) return;
+                // داخل المسار الحقيقي يكون المفتاح الموحّد هو المرجع بعد الإصلاح.
+                // المفاتيح القديمة ذات المسافات تبقى محفوظة للتوافق فقط.
+                const priority = rawKey === key ? 2 : 1;
+                if ((priorities[key] || 0) <= priority) {
+                    result[key] = groupId;
+                    priorities[key] = priority;
+                }
             }));
             return result;
         }
@@ -2217,7 +2225,7 @@
 
         async function migrateCompetitionSandboxToProduction() {
             if (currentRole !== 'admin' || !auth.currentUser) return { skipped:true };
-            const markerRef = db.ref('dashboard_data/migrations/competition_sandbox_to_production_v1');
+            const markerRef = db.ref('dashboard_data/migrations/competition_sandbox_to_production_v2');
             const [productionStudentsSnap, testStudentsSnap, productionAssignmentsSnap, testAssignmentsSnap, groupsSnap, markerSnap] = await Promise.all([
                 db.ref('leaderboard').once('value'),
                 db.ref('leaderboard_test/competition_sandbox').once('value'),
@@ -2229,16 +2237,39 @@
 
             const productionStudents = productionStudentsSnap.val() || {};
             const testStudents = testStudentsSnap.val() || {};
-            const productionAssignments = canonicalizeCompetitionAssignments(productionAssignmentsSnap.val() || {});
+            const rawProductionAssignments = productionAssignmentsSnap.val() || {};
+            const productionAssignments = canonicalizeCompetitionAssignments(rawProductionAssignments);
             const testAssignments = canonicalizeCompetitionAssignments(testAssignmentsSnap.val() || {});
             const validGroups = groupsSnap.val() || {};
             const signature = competitionMigrationSignature(testStudents, testAssignments);
             if (markerSnap.val()?.signature === signature) return { skipped:true };
 
             const mergedStudents = canonicalizeCompetitionLeaderboard(productionStudents, testStudents);
-            const mergedAssignments = { ...productionAssignments };
+            // توزيع الإدارة الحقيقي هو المرجع. نستعمل توزيع التجربة فقط إذا لم
+            // يوجد للطالبة توزيع إداري، ونستعيد المفتاح القديم ذي المسافات لأنه
+            // يحتفظ بالتوزيع السابق قبل أن يكتب الإصلاح الأول المفتاح الموحّد.
+            const mergedAssignments = {};
             Object.entries(testAssignments).forEach(([key, groupId]) => {
                 if (groupId === 'GENERAL' || validGroups[groupId]) mergedAssignments[key] = groupId;
+            });
+            const recoveredProductionAssignments = {};
+            const recoveredPriorities = {};
+            Object.entries(rawProductionAssignments).forEach(([rawKey, groupId]) => {
+                const key = normalizeCompetitionStudentKey(rawKey);
+                if (!key || typeof groupId !== 'string' || !groupId) return;
+                const isLegacyHumanKey = rawKey !== key && /\s/.test(rawKey);
+                const priority = isLegacyHumanKey ? 3 : 2;
+                if ((recoveredPriorities[key] || 0) <= priority) {
+                    recoveredProductionAssignments[key] = groupId;
+                    recoveredPriorities[key] = priority;
+                }
+            });
+            Object.assign(mergedAssignments, recoveredProductionAssignments, productionAssignments);
+            // إن وُجد مفتاح إداري قديم بالمسافات، فهو النسخة السابقة غير
+            // المتأثرة بالدمج الأول، ولذلك يستعيد التوزيع الصحيح ثم يثبته على
+            // المفتاح الموحّد للمستقبل.
+            Object.entries(recoveredProductionAssignments).forEach(([key, groupId]) => {
+                if (recoveredPriorities[key] === 3) mergedAssignments[key] = groupId;
             });
 
             const updates = {};
@@ -2248,7 +2279,7 @@
             Object.entries(mergedAssignments).forEach(([key, groupId]) => {
                 updates[`dashboard_data/student_groups/${key}`] = groupId;
             });
-            updates['dashboard_data/migrations/competition_sandbox_to_production_v1'] = {
+            updates['dashboard_data/migrations/competition_sandbox_to_production_v2'] = {
                 completed:true,
                 signature,
                 students:Object.keys(mergedStudents).length,
