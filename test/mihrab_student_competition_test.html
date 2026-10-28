@@ -7264,8 +7264,11 @@ function calculateLeaderboardProgressThroughToday() {
     today.setHours(0, 0, 0, 0);
     const anchor = getProgramWeekAnchorDate();
     anchor.setHours(0, 0, 0, 0);
-    const elapsedDays = Math.floor((today.getTime() - anchor.getTime()) / 86400000);
-    const competitionWeek = Math.max(1, Math.floor(elapsedDays / getDisplayCycleDays()) + 1);
+    // الحلبة تحسب إنجاز الأسبوع المفتوح فعليًا في البرنامج، لا رقم أسبوع
+    // مستنتجًا من تاريخ البداية؛ فقد تبدأ مرحلة جديدة مع بقاء تاريخ البرنامج الأصلي.
+    const competitionWeek = Number.isInteger(Number(PROG.week)) && Number(PROG.week) >= 1
+        ? Number(PROG.week)
+        : 1;
     const savedWeek = PROG.week;
     const counts = {
         all: { total: 0, done: 0 },
