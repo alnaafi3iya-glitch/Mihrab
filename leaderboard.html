@@ -58,6 +58,7 @@
     </style>
 </head>
 <body class="pb-24 antialiased">
+    <div class="fixed top-0 inset-x-0 z-[200] bg-rose-600 text-white text-center text-xs font-black py-2 shadow-lg">نسخة اختبار معزولة — لا تمس لوحة المنافسة المنشورة</div>
 
     <!-- الرأس -->
     <header class="pt-8 pb-4 px-4 text-center relative overflow-hidden">
@@ -268,6 +269,45 @@
         function getFirebaseKey(str) {
             if(!str) return "";
             return str.trim().replace(/\s+/g, '_').replace(/[.#$[\]]/g, '');
+        }
+
+        function leaderboardRecordTimestamp(record) {
+            return Math.max(Number(record?.lastActivityAt || 0), Number(record?.lastUpdate || 0), Number(record?.updatedAt || 0));
+        }
+
+        function mergeLeaderboardObjects(older, newer) {
+            if (!older || typeof older !== 'object' || Array.isArray(older)) return newer;
+            if (!newer || typeof newer !== 'object' || Array.isArray(newer)) return newer ?? older;
+            const merged = { ...older };
+            Object.entries(newer).forEach(([key, value]) => {
+                merged[key] = value && typeof value === 'object' && !Array.isArray(value)
+                    ? mergeLeaderboardObjects(older[key], value)
+                    : value;
+            });
+            return merged;
+        }
+
+        function canonicalizeLeaderboardRecords(source) {
+            const result = {};
+            Object.entries(source || {}).forEach(([rawKey, student]) => {
+                if (!student || typeof student !== 'object' || Array.isArray(student)) return;
+                const key = getFirebaseKey(rawKey || student.name);
+                if (!key) return;
+                const current = result[key];
+                result[key] = !current ? student : (leaderboardRecordTimestamp(student) >= leaderboardRecordTimestamp(current)
+                    ? mergeLeaderboardObjects(current, student)
+                    : mergeLeaderboardObjects(student, current));
+            });
+            return result;
+        }
+
+        function canonicalizeStudentGroups(source) {
+            const result = {};
+            Object.entries(source || {}).forEach(([rawKey, groupId]) => {
+                const key = getFirebaseKey(rawKey);
+                if (key && typeof groupId === 'string' && groupId) result[key] = groupId;
+            });
+            return result;
         }
 
         function formatLocalDateKey(date = new Date()) {
@@ -629,7 +669,7 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
                 errorEl.classList.add('hidden');
                 
                 // تسجيل الطالبة تلقائياً في قاعدة البيانات بـ 0% إذا لم تكن موجودة مسبقاً
-                const studentRef = ref(db, 'leaderboard_test/competition_sandbox/' + firebaseKey);
+                const studentRef = ref(db, 'leaderboard/' + firebaseKey);
                 try {
                     await authReady;
                     const snapshot = await get(studentRef);
@@ -684,7 +724,7 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
                     try {
                         await authReady;
                         const firebaseKey = getFirebaseKey(resolvedStudentName);
-                        const studentRef = ref(db, 'leaderboard_test/competition_sandbox/' + firebaseKey);
+                        const studentRef = ref(db, 'leaderboard/' + firebaseKey);
                         const snapshot = await get(studentRef);
                         if (!snapshot.exists()) {
                             await set(studentRef, {
@@ -697,7 +737,7 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
                                 lastUpdate: Date.now()
                             });
                         }
-                        await set(ref(db, 'dashboard_data_test/student_groups/' + firebaseKey), selectedGId);
+                        await set(ref(db, 'dashboard_data/student_groups/' + firebaseKey), selectedGId);
                     } catch (error) {
                         console.error("تعذر ربط الطالبة بالحلقة:", error);
                         errorEl.innerText = "تعذر حفظ الانضمام. تحققي من الاتصال ثم أعيدي المحاولة.";
@@ -862,9 +902,9 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
         }
 
         // الاستماع الفوري والمباشر للتغيرات السحابية
-        onValue(ref(db, 'leaderboard_test/competition_sandbox'), (snapshot) => { leaderboardData = snapshot.val() || {}; runCentralRender(); });
-        onValue(ref(db, 'dashboard_data_test/student_groups'), (snapshot) => {
-            studentGroupsMap = snapshot.val() || {};
+        onValue(ref(db, 'leaderboard'), (snapshot) => { leaderboardData = canonicalizeLeaderboardRecords(snapshot.val() || {}); runCentralRender(); });
+        onValue(ref(db, 'dashboard_data/student_groups'), (snapshot) => {
+            studentGroupsMap = canonicalizeStudentGroups(snapshot.val() || {});
             directAssignmentsLoaded = true;
             finishDirectStudentEntryIfReady();
             runCentralRender();

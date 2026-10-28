@@ -7433,7 +7433,7 @@ window.pushToLeaderboard = function({ recordActivity = false } = {}) {
         const hizbMilestoneTimestamp = state._hizbMilestoneTimestamp ?? null;
         const hizbMessageVersion = state._hizbMessageVersion ?? null;
 
-        const key = studentName.replace(/[.#$[\]]/g, '_');
+        const key = studentName.trim().replace(/\s+/g, '_').replace(/[.#$[\]]/g, '_');
 
         const displayedProgressWeekKey = getProgressWeekKey(state);
         const competitionState = {
@@ -7511,7 +7511,7 @@ window.pushToLeaderboard = function({ recordActivity = false } = {}) {
         };
 
         // 4. الإرسال مع تحقق
-        const studentRef = _fbDb.ref('leaderboard_test/competition_sandbox/' + key);
+        const studentRef = _fbDb.ref('leaderboard/' + key);
         studentRef.update(dataToPush, (error) => {
             if (error) {
                 console.error("فشل الإرسال:", error);
@@ -7554,12 +7554,12 @@ function _assertStageHistoryStateUnchanged(before, label) {
 }
 
 function _stageHistorySafeKey(value) {
-    return String(value || 'غير_معروف').replace(/[.#$[\]]/g, '_');
+    return String(value || 'غير_معروف').trim().replace(/\s+/g, '_').replace(/[.#$[\]]/g, '_');
 }
 
 function _stageHistoryRoot(target) {
     const studentKey = _stageHistorySafeKey(S.programName || PROG.name || 'طالبة');
-    return `leaderboard_test/competition_sandbox/${studentKey}`;
+    return `leaderboard/${studentKey}`;
 }
 
 function _stageHistoryPercent(done, total) {

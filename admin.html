@@ -1428,7 +1428,7 @@
         }
 
         // === تحميل البيانات المستمر والتزامن ===
-        function loadDataAndStart() {
+        async function loadDataAndStart() {
             // إخفاء شاشة تسجيل الدخول وعرض اللوحة
             document.getElementById('login-screen').style.opacity = '0';
             setTimeout(() => {
@@ -1440,6 +1440,20 @@
 
             if (LOCAL_STAGE_PREVIEW_MODE) showLocalStagePreviewPanel();
 
+            // توحيد بيانات الحلبة المنشورة مع المسار الحقيقي قبل بدء المستمعات.
+            // العملية غير هادمة: تدمج السجلات وتحفظ الأحدث ولا تحذف مسار التجربة.
+            if (!LOCAL_STAGE_PREVIEW_MODE && currentRole === 'admin') {
+                try {
+                    const migration = await migrateCompetitionSandboxToProduction();
+                    if (migration?.migrated) {
+                        alert(`تم توحيد بيانات الحلبة بنجاح: ${migration.students} طالبة و${migration.assignments} توزيعًا على الحلقات.`);
+                    }
+                } catch (error) {
+                    console.error('تعذر توحيد بيانات الحلبة:', error);
+                    alert('تعذر نقل بيانات الحلبة التجريبية إلى المسار الحقيقي. لم تُحذف أي بيانات؛ تحققي من صلاحيات Firebase ثم أعيدي الدخول.');
+                }
+            }
+
             // إعادة الزر إلى حالته الطبيعية فور نجاح الدخول.
             const loginBtn = document.getElementById('login-submit-btn');
             if (loginBtn) {
@@ -1450,7 +1464,7 @@
             // الاستماع المباشر للتغيرات في قاعدة البيانات
             if (!LOCAL_STAGE_PREVIEW_MODE) {
                 db.ref('leaderboard').on('value', snap => { 
-                    leaderboardData = snap.val() || {}; 
+                    leaderboardData = canonicalizeCompetitionLeaderboard(snap.val() || {}); 
                     updateUI(); 
                     updateTeacherExamDueBadge();
                     if (!document.getElementById('view-exams')?.classList.contains('hidden')) renderExamCenter();
@@ -1458,7 +1472,7 @@
             }
 
             db.ref('dashboard_data/student_groups').on('value', snap => { 
-                studentGroupsMap = snap.val() || {}; 
+                studentGroupsMap = canonicalizeCompetitionAssignments(snap.val() || {}); 
                 updateUI(); 
                 if (editingGroupId) renderEditedGroupStudents();
             }, err => console.error("Firebase error reading student_groups:", err));
@@ -2136,6 +2150,119 @@
             return String(value || '').trim().replace(/\s+/g, '_').replace(/[.#$[\]]/g, '');
         }
 
+        function competitionRecordTimestamp(record) {
+            return Math.max(
+                Number(record?.lastActivityAt || 0),
+                Number(record?.lastUpdate || 0),
+                Number(record?.updatedAt || 0)
+            );
+        }
+
+        function mergeCompetitionObjects(older, newer) {
+            if (!older || typeof older !== 'object' || Array.isArray(older)) return newer;
+            if (!newer || typeof newer !== 'object' || Array.isArray(newer)) return newer ?? older;
+            const merged = { ...older };
+            Object.entries(newer).forEach(([key, value]) => {
+                merged[key] = value && typeof value === 'object' && !Array.isArray(value)
+                    ? mergeCompetitionObjects(older[key], value)
+                    : value;
+            });
+            return merged;
+        }
+
+        function mergeCompetitionStudentRecords(first, second) {
+            if (!first) return second || {};
+            if (!second) return first || {};
+            return competitionRecordTimestamp(second) >= competitionRecordTimestamp(first)
+                ? mergeCompetitionObjects(first, second)
+                : mergeCompetitionObjects(second, first);
+        }
+
+        function canonicalizeCompetitionLeaderboard(...sources) {
+            const result = {};
+            sources.forEach(source => Object.entries(source || {}).forEach(([rawKey, student]) => {
+                if (!student || typeof student !== 'object' || Array.isArray(student)) return;
+                const key = normalizeCompetitionStudentKey(rawKey || student.name);
+                if (!key) return;
+                result[key] = mergeCompetitionStudentRecords(result[key], student);
+            }));
+            return result;
+        }
+
+        function canonicalizeCompetitionAssignments(...sources) {
+            const result = {};
+            sources.forEach(source => Object.entries(source || {}).forEach(([rawKey, groupId]) => {
+                const key = normalizeCompetitionStudentKey(rawKey);
+                if (key && typeof groupId === 'string' && groupId) result[key] = groupId;
+            }));
+            return result;
+        }
+
+        function competitionMigrationSignature(testStudents, testAssignments) {
+            const raw = JSON.stringify([
+                Object.entries(testStudents || {}).map(([key, value]) => [
+                    normalizeCompetitionStudentKey(key), competitionRecordTimestamp(value)
+                ]).sort(),
+                Object.entries(testAssignments || {}).map(([key, value]) => [
+                    normalizeCompetitionStudentKey(key), value
+                ]).sort()
+            ]);
+            let hash = 2166136261;
+            for (let index = 0; index < raw.length; index++) {
+                hash ^= raw.charCodeAt(index);
+                hash = Math.imul(hash, 16777619);
+            }
+            return String(hash >>> 0);
+        }
+
+        async function migrateCompetitionSandboxToProduction() {
+            if (currentRole !== 'admin' || !auth.currentUser) return { skipped:true };
+            const markerRef = db.ref('dashboard_data/migrations/competition_sandbox_to_production_v1');
+            const [productionStudentsSnap, testStudentsSnap, productionAssignmentsSnap, testAssignmentsSnap, groupsSnap, markerSnap] = await Promise.all([
+                db.ref('leaderboard').once('value'),
+                db.ref('leaderboard_test/competition_sandbox').once('value'),
+                db.ref('dashboard_data/student_groups').once('value'),
+                db.ref('dashboard_data_test/student_groups').once('value'),
+                db.ref('dashboard_data/groups').once('value'),
+                markerRef.once('value')
+            ]);
+
+            const productionStudents = productionStudentsSnap.val() || {};
+            const testStudents = testStudentsSnap.val() || {};
+            const productionAssignments = canonicalizeCompetitionAssignments(productionAssignmentsSnap.val() || {});
+            const testAssignments = canonicalizeCompetitionAssignments(testAssignmentsSnap.val() || {});
+            const validGroups = groupsSnap.val() || {};
+            const signature = competitionMigrationSignature(testStudents, testAssignments);
+            if (markerSnap.val()?.signature === signature) return { skipped:true };
+
+            const mergedStudents = canonicalizeCompetitionLeaderboard(productionStudents, testStudents);
+            const mergedAssignments = { ...productionAssignments };
+            Object.entries(testAssignments).forEach(([key, groupId]) => {
+                if (groupId === 'GENERAL' || validGroups[groupId]) mergedAssignments[key] = groupId;
+            });
+
+            const updates = {};
+            Object.entries(mergedStudents).forEach(([key, student]) => {
+                updates[`leaderboard/${key}`] = student;
+            });
+            Object.entries(mergedAssignments).forEach(([key, groupId]) => {
+                updates[`dashboard_data/student_groups/${key}`] = groupId;
+            });
+            updates['dashboard_data/migrations/competition_sandbox_to_production_v1'] = {
+                completed:true,
+                signature,
+                students:Object.keys(mergedStudents).length,
+                assignments:Object.keys(mergedAssignments).length,
+                completedAt:firebase.database.ServerValue.TIMESTAMP
+            };
+            await db.ref().update(updates);
+            return {
+                migrated:true,
+                students:Object.keys(mergedStudents).length,
+                assignments:Object.keys(mergedAssignments).length
+            };
+        }
+
         function getCompetitionMapKeys(studentKey) {
             return Object.keys(studentGroupsMap || {}).filter(dbKey =>
                 normalizeCompetitionStudentName(dbKey) === normalizeCompetitionStudentName(studentKey) ||
@@ -2358,7 +2485,7 @@
             if(!name) { alert('يرجى إدخال اسم الطالبة أولاً'); return; }
 
             // تصفية الاسم من الرموز التي تسبب أخطاء في Firebase keys
-            const key = name.replace(/[.#$[\]]/g, '_');
+            const key = normalizeCompetitionStudentKey(name);
 
             // تجهيز البيانات الافتراضية المناسبة لبرنامج محراب
             const studentData = {
@@ -2402,7 +2529,7 @@
             const firstNames = ["نورة", "سارة", "مريم", "فاطمة", "عائشة", "هند", "منى", "أسماء", "خديجة", "أميرة"];
             const familyNames = ["العتيبي", "الشمري", "الحارثي", "الدوسري", "القرني", "الحربي", "الخالدي", "القحطاني", "الغامدي"];
             const randName = firstNames[Math.floor(Math.random() * firstNames.length)] + " " + familyNames[Math.floor(Math.random() * familyNames.length)] + " (" + Math.floor(Math.random() * 900 + 100) + ")";
-            const key = randName.replace(/[.#$[\]]/g, '_');
+            const key = normalizeCompetitionStudentKey(randName);
 
             db.ref('leaderboard/' + key).set({
                 name: randName,
