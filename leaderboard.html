@@ -58,6 +58,7 @@
     </style>
 </head>
 <body class="pb-24 antialiased">
+    <div class="fixed top-0 inset-x-0 z-[200] bg-rose-600 text-white text-center text-xs font-black py-2 shadow-lg">نسخة اختبار معزولة — لا تمس لوحة المنافسة المنشورة</div>
 
     <!-- الرأس -->
     <header class="pt-8 pb-4 px-4 text-center relative overflow-hidden">
@@ -234,9 +235,8 @@
             if (returnIcon) returnIcon.className = 'fa-solid fa-arrow-right';
         }
 
-        let savedGroupId = isDirectStudentEntry
-            ? ''
-            : (isDirectGroupPreview ? requestedPreviewGroup : (localStorage.getItem('qp_leaderboard_group_id') || ""));
+        // نسخة الاختبار تعرض كل السجلات الموجودة داخل بيئة الاختبار، بصرف النظر عن الحلقة.
+        let savedGroupId = 'ADMIN_ALL';
         let directGroupResolutionPending = isDirectStudentEntry;
         let directGroupsLoaded = false;
         let directAssignmentsLoaded = false;
@@ -569,11 +569,10 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
                     if (sGroupId !== activeScope) continue;
                 }
 
-                // الحلبة يومية. إذا كانت آخر نسبة منشورة تخص يوماً سابقاً،
-                // تُعرض النسب صفراً فور بدء اليوم الجديد حتى قبل فتح الطالبة لبرنامجها.
-                const todayKey = formatLocalDateKey();
-                const isTodayRecord = s.dayKey === todayKey;
-                const displayData = isTodayRecord ? s : {
+                // الحلبة أسبوعية تراكمية: تبقى النسب طوال الأسبوع، وتُصفّر فقط
+                // عندما يبدأ أسبوع تقويمي جديد ولم تُنشر للطالبة بياناته بعد.
+                const isCurrentWeekRecord = s.weekKey === currentWeekKey;
+                const displayData = isCurrentWeekRecord ? s : {
                     ...s,
                     weekPct: 0,
                     mutqanPct: 0,
@@ -631,7 +630,7 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
                 errorEl.classList.add('hidden');
                 
                 // تسجيل الطالبة تلقائياً في قاعدة البيانات بـ 0% إذا لم تكن موجودة مسبقاً
-                const studentRef = ref(db, 'leaderboard/' + firebaseKey);
+                const studentRef = ref(db, 'leaderboard_test/competition_sandbox/' + firebaseKey);
                 try {
                     await authReady;
                     const snapshot = await get(studentRef);
@@ -686,7 +685,7 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
                     try {
                         await authReady;
                         const firebaseKey = getFirebaseKey(resolvedStudentName);
-                        const studentRef = ref(db, 'leaderboard/' + firebaseKey);
+                        const studentRef = ref(db, 'leaderboard_test/competition_sandbox/' + firebaseKey);
                         const snapshot = await get(studentRef);
                         if (!snapshot.exists()) {
                             await set(studentRef, {
@@ -699,7 +698,7 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
                                 lastUpdate: Date.now()
                             });
                         }
-                        await set(ref(db, 'dashboard_data/student_groups/' + firebaseKey), selectedGId);
+                        await set(ref(db, 'dashboard_data_test/student_groups/' + firebaseKey), selectedGId);
                     } catch (error) {
                         console.error("تعذر ربط الطالبة بالحلقة:", error);
                         errorEl.innerText = "تعذر حفظ الانضمام. تحققي من الاتصال ثم أعيدي المحاولة.";
@@ -864,8 +863,8 @@ const now = new Date(), dayOfWeek = now.getDay(), diffToMon = (dayOfWeek === 0) 
         }
 
         // الاستماع الفوري والمباشر للتغيرات السحابية
-        onValue(ref(db, 'leaderboard'), (snapshot) => { leaderboardData = snapshot.val() || {}; runCentralRender(); });
-        onValue(ref(db, 'dashboard_data/student_groups'), (snapshot) => {
+        onValue(ref(db, 'leaderboard_test/competition_sandbox'), (snapshot) => { leaderboardData = snapshot.val() || {}; runCentralRender(); });
+        onValue(ref(db, 'dashboard_data_test/student_groups'), (snapshot) => {
             studentGroupsMap = snapshot.val() || {};
             directAssignmentsLoaded = true;
             finishDirectStudentEntryIfReady();
