@@ -3399,7 +3399,9 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             else if (reviewUnit === "بالأحزاب") { for (let i=1; i<=60; i++) { let ep = (i<60) ? HIZB_START_PAGES[i]-1 : 604; if (ep <= rawEndPage+0.05) snapped = ep; } }
             else if (reviewUnit === "بالأرباع") { for (let i=0; i<240; i++) { let ep = unitLastRealPage(i, "ربع"); if (ep <= rawEndPage+0.05) snapped = ep; } }
             else if (reviewUnit === "بنصف حزب") { for (let i=0; i<120; i++) { let ep = unitLastRealPage(i, "نصف حزب"); if (ep <= rawEndPage+0.05) snapped = ep; } }
-            return snapped || Math.floor(rawEndPage);
+            // إذا لم تكتمل أي وحدة من وحدة المتقن المختارة فلا نمرّر ذيلاً
+            // جزئياً؛ يبقى في المتفلت حتى تكتمل الوحدة كاملة.
+            return snapped;
         }
 
         // بداية وحدة مراجعة المتقن التي تحتوي الصفحة المحددة. نحتاجها عند منع
@@ -3513,38 +3515,13 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             return merged;
         }
 
-        // يقسم النطاق المنتقل إلى المتقن بالوحدة المختارة، ويعرض أي بقية لم
-        // تكتمل وحدتها الكبرى بأكبر وحدة أصغر مكتملة بدلاً من إخفائها أو
-        // تفتيتها مباشرة إلى صفحات. عند اكتمال الوحدة الكبرى في أسبوع لاحق
-        // يعاد بناؤها تلقائياً كوحدة واحدة.
+        // بوابة وحدة المتقن: لا يخرج من المتفلت إلا ما اكتملت وحدته المختارة.
+        // أي بقية غير مكتملة تبقى معلقة ولا تُفكك إلى وحدة أصغر.
         function buildAdaptiveMutqanRanges(startPage, endPage, preferredUnit) {
-            const fallback = {
-                "بالأجزاء": "بالأحزاب",
-                "بالسور": "بالأحزاب",
-                "بالأحزاب": "بنصف حزب",
-                "بنصف حزب": "بالأرباع",
-                "بالأرباع": "بالصفحات"
-            };
             const start = Math.max(1, Math.min(604, Math.floor(startPage)));
             const end = Math.max(start, Math.min(604, Math.floor(endPage)));
-            if (preferredUnit === "بالصفحات") {
-                return [{ startPage: start, endPage: end, reviewUnitOverride: "بالصفحات" }];
-            }
-
-            const complete = getCompletedMutqanRangesWithin(start, end, preferredUnit);
-            const result = [];
-            let cursor = start;
-            for (const range of complete) {
-                if (cursor < range.startPage) {
-                    result.push(...buildAdaptiveMutqanRanges(cursor, range.startPage - 1, fallback[preferredUnit] || "بالصفحات"));
-                }
-                result.push({ ...range, reviewUnitOverride: preferredUnit });
-                cursor = range.endPage + 1;
-            }
-            if (cursor <= end) {
-                result.push(...buildAdaptiveMutqanRanges(cursor, end, fallback[preferredUnit] || "بالصفحات"));
-            }
-            return result;
+            return getCompletedMutqanRangesWithin(start, end, preferredUnit)
+                .map(range => ({ ...range, reviewUnitOverride: preferredUnit }));
         }
 
         // نطاق المتفلت في برنامج بلا متقن قد يبدأ من أول سورة اختارتها الطالبة
@@ -3552,26 +3529,7 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
         // لذلك تُعامل كل دفعة مكتملة من وحدات برنامجها كحزب واحد، ولا نعيد
         // تفكيكها إلى صفحات لمجرد أن بدايتها لا تطابق HIZB_START_PAGES.
         function buildNoInitialMutqanRanges(startPage, endPage, preferredUnit) {
-            const start = Math.max(1, Math.min(604, Math.floor(startPage)));
-            const end = Math.max(start, Math.min(604, Math.floor(endPage)));
-            if (!["بالأجزاء", "بالسور"].includes(preferredUnit)) {
-                return [{ startPage: start, endPage: end, reviewUnitOverride: preferredUnit }];
-            }
-
-            const completePreferred = getCompletedMutqanRangesWithin(start, end, preferredUnit);
-            const result = [];
-            let cursor = start;
-            for (const range of completePreferred) {
-                if (cursor < range.startPage) {
-                    result.push({ startPage: cursor, endPage: range.startPage - 1, reviewUnitOverride: "بالأحزاب" });
-                }
-                result.push({ ...range, reviewUnitOverride: preferredUnit });
-                cursor = range.endPage + 1;
-            }
-            if (cursor <= end) {
-                result.push({ startPage: cursor, endPage: end, reviewUnitOverride: "بالأحزاب" });
-            }
-            return result;
+            return buildAdaptiveMutqanRanges(startPage, endPage, preferredUnit);
         }
 
         // ==============================================================
@@ -4661,6 +4619,51 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                 newMemStatePerDay[g] = { nMemText, nRevText, newMemIndexOfDay, newReviewInfoOnly };
             }
 
+            // في العرض الفعلي لا ينتقل الحزب القادم من الحفظ الجديد بمرور الأيام.
+            // يبقى ظاهرًا في المتفلت حتى تُنجز 12 علامة mutfaletNewHizb فعليًا،
+            // ثم يصبح جاهزًا للمتقن في اليوم التالي. الطابور تسلسلي كيلا يتداخل حزبان.
+            if (!isPlannedDistributionView()) {
+                const graduationQueue = [];
+                if (_fixedNewReviewCarry) {
+                    graduationQueue.push({
+                        target: _fixedNewReviewCarry,
+                        nominalStart: _fixedNewReviewCarry.mfStartDay || 1
+                    });
+                }
+                newHizbMfList.forEach(item => graduationQueue.push({
+                    target: item,
+                    nominalStart: item.mfStartDay || 1
+                }));
+
+                let previousCompletionDay = 0;
+                for (const entry of graduationQueue) {
+                    const canStart = Number.isFinite(previousCompletionDay);
+                    const actualStart = canStart
+                        ? Math.max(entry.nominalStart, previousCompletionDay + 1)
+                        : Number.MAX_SAFE_INTEGER;
+                    let completedReviews = 0;
+                    let completionDay = null;
+                    if (actualStart <= globalDaysEndOfWeek) {
+                        for (let day = actualStart; day <= globalDaysEndOfWeek; day++) {
+                            const position = getTrackPositionForGlobalDay(day);
+                            if (getTrackStatus(position.week, position.day, 'mutfaletNewHizb') === 'done') {
+                                completedReviews++;
+                                if (completedReviews >= MF_FULL_REPS) {
+                                    completionDay = day;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    entry.target.mfStartDay = actualStart;
+                    entry.target.mfEndDay = completionDay ?? Number.MAX_SAFE_INTEGER;
+                    entry.target.mutqanStartDay = completionDay !== null
+                        ? completionDay + 1
+                        : Number.MAX_SAFE_INTEGER;
+                    previousCompletionDay = completionDay ?? Infinity;
+                }
+            }
+
             // MIH-GAP-CATCHUP-2026-09-22: استدراك الفجوة الحزبية قبل ترقية نطاق جديد جزئي.
             const newMemGapCatchups = [];
             newHizbMfList.forEach(item => {
@@ -4721,20 +4724,20 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
             // كوحدة واحدة؛ ما يُتم ستة أيامه في منتصف الأسبوع يدخل في الدورة
             // التالية، لا بأثر رجعي من أول الأسبوع نفسه.
             // MIH-ORIGINAL-MF-SATURDAY-2026-09-22:
-            // لا نعتبر الحزب منتقلاً عند بلوغ آخر يوم مراجعة نفسه. يجب أن تكون
-            // المراجعات النهائية قد انقضت فعلاً (> FINAL_REVIEW_DELAY_DAYS).
+            // تكتمل أهلية الانتقال عند بلوغ العدد النهائي المطلوب من المراجعات
+            // (>= FINAL_REVIEW_DELAY_DAYS)، من دون اشتراط مراجعة زائدة.
             // ما يكتمل أثناء الأسبوع لا يدخل بأثر رجعي في توزيع المتقن؛ يثبت
             // يوم السبت مرة واحدة، ثم يصبح ضمن الرصيد المستقر من الأسبوع التالي.
             const consolidatedMfUnits = originalMfHizbMilestones
                 .filter(item => Number.isInteger(item.completedGlobalDay) &&
-                    countMfUnpausedReviewDays(item.completedGlobalDay, currentWeekFirstGlobalDay - 1) > FINAL_REVIEW_DELAY_DAYS)
+                    countMfUnpausedReviewDays(item.completedGlobalDay, currentWeekFirstGlobalDay - 1) >= FINAL_REVIEW_DELAY_DAYS)
                 .reduce((max, item) => Math.max(max, item.completedUnitCount), 0);
             const newlyMaturedOriginalMfMilestones = originalMfHizbMilestones
                 .filter(item => {
                     if (!Number.isInteger(item.completedGlobalDay)) return false;
                     const beforeWeek = countMfUnpausedReviewDays(item.completedGlobalDay, currentWeekFirstGlobalDay - 1);
                     const byWeekEnd = countMfUnpausedReviewDays(item.completedGlobalDay, globalDaysEndOfWeek);
-                    return beforeWeek <= FINAL_REVIEW_DELAY_DAYS && byWeekEnd > FINAL_REVIEW_DELAY_DAYS;
+                    return beforeWeek < FINAL_REVIEW_DELAY_DAYS && byWeekEnd >= FINAL_REVIEW_DELAY_DAYS;
                 });
             const effectiveProcessedMfUnits = Math.min(totalBaseMfUnits, consolidatedMfUnits);
             const lastTransferredMfUnitIndex = (effectiveProcessedMfUnits > 0) ? (startMfIndex + effectiveProcessedMfUnits - 1) : -1;
@@ -4911,10 +4914,9 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                         continuousCoverageEnd >= range.start - 1 &&
                         range.end >= containingHizbEnd;
 
-                    const mustPinPartialNewMemRange =
-                        range.isNewMemGraduation === true &&
-                        !isExactFullHizbRange &&
-                        !completesHizbWithPriorCoverage;
+                    // النطاق المتصل يُدمج مع التغطية السابقة أولاً؛ ثم تحكم وحدة
+                    // المتقن في ظهوره. لا نثبّت جزءاً متصلاً كصفحات مستقلة.
+                    const mustPinPartialNewMemRange = false;
 
                     if (
                         !range.isTerminalPartial &&
@@ -4996,14 +4998,34 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
             // النطاق singleAtomicUnit (تصحيح MIH-003) يُستثنى من التقسيم التكيفي: هو
             // أصلاً وحدة واحدة مكتملة (حزب تخرَّج من المتفلت)، وتقسيمه هنا كغيره كان
             // سيُنتج تسميات فرعية (ربع/نصف حزب) بدل اسم الحزب نفسه.
-            const completedDisjointReadyTransferredRanges = fullHizbDisjointReadyRanges
-                .flatMap(range => {
-                    if (range.source === 'terminal-partial') return [{ ...range, reviewUnitOverride: 'بالصفحات' }];
-                    if (range.preserveExactRange) return [{ ...range, reviewUnitOverride: 'بالصفحات' }];
-                    if (range.singleAtomicUnit) return [{ ...range }];
-                    return buildAdaptiveMutqanRanges(range.startPage, range.endPage, S.mutqanReviewUnit)
-                        .map(completedRange => ({ ...completedRange, source: range.source }));
+            const mergedDisjointReadyRanges = [];
+            disjointReadyTransferredRanges
+                .slice()
+                .sort((a, b) => a.startPage - b.startPage)
+                .forEach(range => {
+                    const last = mergedDisjointReadyRanges[mergedDisjointReadyRanges.length - 1];
+                    if (last && range.startPage <= last.endPage + 1) {
+                        last.endPage = Math.max(last.endPage, range.endPage);
+                        last.availableFromGlobalDay = Math.max(
+                            last.availableFromGlobalDay || 0,
+                            range.availableFromGlobalDay || 0
+                        ) || null;
+                        if (range.source === 'graduated-mutafallit') last.source = range.source;
+                    } else {
+                        mergedDisjointReadyRanges.push({ ...range });
+                    }
                 });
+            const completedDisjointReadyTransferredRanges = mergedDisjointReadyRanges
+                .flatMap(range => buildAdaptiveMutqanRanges(
+                    range.startPage,
+                    range.endPage,
+                    S.mutqanReviewUnit
+                ).map(completedRange => ({
+                    ...completedRange,
+                    source: range.source,
+                    availableFromGlobalDay: range.availableFromGlobalDay || null,
+                    hizb: range.hizb || null
+                })));
 
             // ندمج التغطية أولاً، ثم نستخرج وحدات المتقن المكتملة فقط.
             snappedEndThisWeek = Math.max(
@@ -5014,11 +5036,8 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                     false
                 )
             );
-            // بلا متقن ابتدائي لا ننتظر اكتمال السورة/الجزء المختار ولا نسقط
-            // الذيل المكتمل تثبيته؛ سيعرضه التقسيم التكيفي بوحدة أصغر مؤقتاً.
-            if (S.hasInitialMutqan === false) {
-                snappedEndThisWeek = Math.max(inheritedMutqanEndPage, continuousCoverageEnd);
-            }
+            // حتى عند عدم وجود متقن ابتدائي تبقى بوابة الوحدة المختارة حاكمة؛
+            // لا يُعرض ذيل سورة/حزب/جزء بوحدة أصغر مؤقتاً.
 
             // حاجز عدم التداخل: لا يجوز أن تدخل في المتقن أي صفحة ما زالت معروضة
             // في المتفلت خلال الأسبوع نفسه. تظهر هذه الحالة خصوصاً عند بدء مرحلة
