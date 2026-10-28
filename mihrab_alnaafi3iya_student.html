@@ -7953,7 +7953,7 @@ window.openStudentLeaderboard = async function() {
         localStorage.setItem('qps_leaderboard_joined', '1');
         localStorage.setItem('qps_leaderboard_student_name', studentName);
         pushToLeaderboard();
-        const destination = './leaderboard_competition_test.html';
+        const destination = './leaderboard.html';
         if (targetWindow) targetWindow.location.href = destination;
         else window.open(destination, '_blank');
         return true;
