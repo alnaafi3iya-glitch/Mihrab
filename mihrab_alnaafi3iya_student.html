@@ -296,6 +296,18 @@ const NEW_REVIEW_FULL_REPS = 6;
 const NEW_REVIEW_TOTAL_REPS = NEW_REVIEW_TAIL_REPS + NEW_REVIEW_FULL_REPS;
 const MF_FULL_REPS = 12;
 const ORIGINAL_MF_TOTAL_REPS = NEW_REVIEW_TAIL_REPS + MF_FULL_REPS;
+function shouldRepeatLastHalf(unitName) {
+    return Number(UNITS_PER_HIZB[unitName] || 0) >= UNITS_PER_HIZB["ربع"];
+}
+function getLastHalfReps(unitName) {
+    return shouldRepeatLastHalf(unitName) ? NEW_REVIEW_TAIL_REPS : 0;
+}
+function getNewReviewTotalReps(unitName) {
+    return getLastHalfReps(unitName) + NEW_REVIEW_FULL_REPS;
+}
+function getOriginalMfTotalReps(unitName) {
+    return getLastHalfReps(unitName) + MF_FULL_REPS;
+}
        // المصفوفة المصححة المعتمدة - مصدر التحقق: مكتبة quran-meta (بيانات Unicode الرسمية
         // لمجمع الملك فهد) + جدول "تقسيم أحزاب القرآن الكريم" المرجعي (تطابق 100% بين المصدرين)
         const HIZB_START_PAGES = [
@@ -725,15 +737,16 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
                 unitFirstRealPage(originalStartIndex, S.newDailyUnit)
             );
             const rangeEnd = unitLastRealPage(lastDoneIndex, S.newDailyUnit);
+            const reviewTotalReps = getNewReviewTotalReps(S.newDailyUnit);
             S._newReviewCarryover = {
                 startIndex: getStartingAbsIndex('pages', String(rangeStart), S.newDailyUnit, '1'),
                 endIndex: lastDoneIndex,
                 dailyUnit: S.newDailyUnit,
                 reviewStartDay: lastDoneGlobalDay + 1,
-                reviewEndDay: lastDoneGlobalDay + NEW_REVIEW_TOTAL_REPS,
-                mfStartDay: lastDoneGlobalDay + NEW_REVIEW_TOTAL_REPS + 1,
-                mfEndDay: lastDoneGlobalDay + NEW_REVIEW_TOTAL_REPS + MF_FULL_REPS,
-                mutqanStartDay: lastDoneGlobalDay + NEW_REVIEW_TOTAL_REPS + MF_FULL_REPS + 1
+                reviewEndDay: lastDoneGlobalDay + reviewTotalReps,
+                mfStartDay: lastDoneGlobalDay + reviewTotalReps + 1,
+                mfEndDay: lastDoneGlobalDay + reviewTotalReps + MF_FULL_REPS,
+                mutqanStartDay: lastDoneGlobalDay + reviewTotalReps + MF_FULL_REPS + 1
             };
         }
 
@@ -1287,15 +1300,16 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
                     maxClosedHizb * unitsPerHizb
                 );
                 if (carryStartIndex <= effectiveLastNewMemIndex) {
+                    const reviewTotalReps = getNewReviewTotalReps(dailyUnit);
                     newReviewCarryover = {
                         startIndex: carryStartIndex,
                         endIndex: effectiveLastNewMemIndex,
                         dailyUnit,
                         reviewStartDay: 1,
-                        reviewEndDay: NEW_REVIEW_TOTAL_REPS,
-                        mfStartDay: NEW_REVIEW_TOTAL_REPS + 1,
-                        mfEndDay: NEW_REVIEW_TOTAL_REPS + MF_FULL_REPS,
-                        mutqanStartDay: NEW_REVIEW_TOTAL_REPS + MF_FULL_REPS + 1,
+                        reviewEndDay: reviewTotalReps,
+                        mfStartDay: reviewTotalReps + 1,
+                        mfEndDay: reviewTotalReps + MF_FULL_REPS,
+                        mutqanStartDay: reviewTotalReps + MF_FULL_REPS + 1,
                         completedPrefixReviewFinished
                     };
                 }
@@ -1403,7 +1417,8 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
                 const elapsedTailDays = Number.isInteger(lastWeekRows.mfFinalReviewElapsedDays)
                     ? lastWeekRows.mfFinalReviewElapsedDays
                     : 0;
-                const remainingTailDays = Math.max(1, Math.min(ORIGINAL_MF_TOTAL_REPS, ORIGINAL_MF_TOTAL_REPS - elapsedTailDays));
+                const originalMfTotalReps = getOriginalMfTotalReps(s.dailyUnit);
+                const remainingTailDays = Math.max(1, Math.min(originalMfTotalReps, originalMfTotalReps - elapsedTailDays));
                 return { mfCarryoverRemainingDays: remainingTailDays, label: formatDiscreteUnit(maxAbsIndex, s.dailyUnit) };
             }
 
@@ -3665,8 +3680,9 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
         // وما بعدهما فقط = تثبيت الحزب الكامل. يمنع احتساب يومي التقوية ضمن الـ12.
         function getOriginalMfReinforcementProgress(completedGlobalDay, endGlobalDayInclusive) {
             const totalDone = countMfUnpausedReviewDays(completedGlobalDay, endGlobalDayInclusive);
-            const tailDone = Math.min(NEW_REVIEW_TAIL_REPS, totalDone);
-            const fullDone = Math.max(0, totalDone - NEW_REVIEW_TAIL_REPS);
+            const tailReps = getLastHalfReps(S.dailyUnit);
+            const tailDone = Math.min(tailReps, totalDone);
+            const fullDone = Math.max(0, totalDone - tailReps);
             return { totalDone, tailDone, fullDone };
         }
 
@@ -4180,6 +4196,10 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
         // الأسبوع التالي فقط أطول تسلسل منجز فعلياً بلا فجوة.
 
         function generateWeekSchedule() {
+            const newReviewTailReps = getLastHalfReps(S.newDailyUnit);
+            const newReviewTotalReps = getNewReviewTotalReps(S.newDailyUnit);
+            const originalMfTailReps = getLastHalfReps(S.dailyUnit);
+            const originalMfTotalReps = getOriginalMfTotalReps(S.dailyUnit);
             const mP = inputToPages(S.mutqanUnit, S.mutqanFrom, S.mutqanTo, S.mutqanFromQuarter, S.mutqanToQuarter);
             const fP = inputToPages(S.mfUnit, S.mfFrom, S.mfTo, S.mfFromQuarter, S.mfToQuarter);
             const hasBaseMutqan = S.hasInitialMutqan !== false && !!mP;
@@ -4275,7 +4295,7 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             // كل طالبة)، بدعوى تناقضها مع newHizbMfList. لكن بسمة أكدت أن النسخة
             // القديمة (بقيمة ثابتة 6 بصرف النظر عن activeDays) هي السلوك الصحيح
             // المقصود أصلاً. أُعيدها كما كانت، بناءً على توجيهها المباشر لا اجتهاداً مني.
-            const FINAL_REVIEW_DELAY_DAYS = ORIGINAL_MF_TOTAL_REPS;
+            const FINAL_REVIEW_DELAY_DAYS = originalMfTotalReps;
             // === دعم استمرار المراجعة التراكمية من مرحلة سابقة (لا تصفير) — تصحيح جوهري 2026-07-26 ===
             // S._mfCarryoverRemainingDays: عدد أيام المراجعة المتبقية فعلياً (١-٦) من ذيل حزب اكتمل ورده
             // في المرحلة السابقة. يُستخدم فقط لعرض نص مراجعة مستقل تماماً لأول globalDay أيام (أدناه)،
@@ -4295,7 +4315,8 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
                     const reviewStartDay = Number.isInteger(_newReviewCarryRaw.reviewStartDay)
                         ? _newReviewCarryRaw.reviewStartDay
                         : 1;
-                    const reviewEndDay = reviewStartDay + NEW_REVIEW_TOTAL_REPS - 1;
+                    const carryReviewTotalReps = getNewReviewTotalReps(_newReviewCarryRaw.dailyUnit || S.newDailyUnit);
+                    const reviewEndDay = reviewStartDay + carryReviewTotalReps - 1;
                     const mfStartDay = reviewEndDay + 1;
                     return {
                         ..._newReviewCarryRaw,
@@ -4393,8 +4414,8 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             // تتبع الأحزاب المنجزة
             for (let g = 1; g <= globalDaysEndOfWeek; g++) {
                 completedHizbs.forEach(ch => {
-                    if (g > ch.completedOn + NEW_REVIEW_TOTAL_REPS) {
-                        const nominalMfStart = ch.completedOn + NEW_REVIEW_TOTAL_REPS + 1;
+                    if (g > ch.completedOn + newReviewTotalReps) {
+                        const nominalMfStart = ch.completedOn + newReviewTotalReps + 1;
 if (!newHizbMfList.some(h => h.hizb === ch.hizb)) {
     // طابور زمني: لا يبدأ حزب جديد دورتيه قبل انتهاء الحزب السابق،
     // حتى لا يتداخل حزبان ويختفي أحدهما بسبب عرض عنصر واحد في الخلية.
@@ -4457,7 +4478,7 @@ if (!newHizbMfList.some(h => h.hizb === ch.hizb)) {
 
             let fixStr = completedHizbs.filter(ch => (
                     g > ch.completedOn &&
-                    g <= ch.completedOn + NEW_REVIEW_TAIL_REPS
+                    g <= ch.completedOn + newReviewTailReps
                 ))
                 .map(ch => {
                     const realStart = HIZB_START_PAGES[ch.hizb - 1];
@@ -4468,8 +4489,8 @@ if (!newHizbMfList.some(h => h.hizb === ch.hizb)) {
                 })
                 .join("<br/>");
             let consolidationStr = completedHizbs.filter(ch => (
-                    g > ch.completedOn + NEW_REVIEW_TAIL_REPS &&
-                    g <= ch.completedOn + NEW_REVIEW_TOTAL_REPS
+                    g > ch.completedOn + newReviewTailReps &&
+                    g <= ch.completedOn + newReviewTotalReps
                 ))
                 .map(ch => {
                     // نستخدم حدود الحزب الحقيقية مباشرة (HIZB_START_PAGES) بدل تحويل الوحدة إلى صفحة تقريبية
@@ -4630,7 +4651,7 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                         const carryReviewStart = Number.isInteger(carry.reviewStartDay) ? carry.reviewStartDay : 1;
                         const carryElapsed = g - carryReviewStart + 1;
                         const carryHizb = hizbNumFromUnitIndex(carry.endIndex, carry.dailyUnit);
-                        const carryLabel = carryElapsed <= NEW_REVIEW_TAIL_REPS
+                        const carryLabel = carryElapsed <= getLastHalfReps(carry.dailyUnit)
                             ? `نصف 2/ح${carryHizb} — يُكرّر مرتين`
                             : formatDiscreteRange(carry.startIndex, carry.endIndex, carry.dailyUnit);
                         const carryHTML = `<span class="text-[10.5px] text-slate-600 font-bold">${carryLabel}</span>`;
@@ -5398,7 +5419,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                                 const maturedOriginalMfEndIndex = originalMfHizbMilestones.reduce((max, item) => {
                             if (!Number.isInteger(item.completedGlobalDay)) return max;
                             const reinforcement = getOriginalMfReinforcementProgress(item.completedGlobalDay, globalDay);
-                            if (reinforcement.tailDone < NEW_REVIEW_TAIL_REPS || reinforcement.fullDone < MF_FULL_REPS) return max;
+                            if (reinforcement.tailDone < originalMfTailReps || reinforcement.fullDone < MF_FULL_REPS) return max;
                             return Math.max(max, startMfIndex + item.completedUnitCount - 1);
                         }, -1);
                         const mfCumStart = mfCumulativeEnd >= mfCumulativeBaseStart
@@ -5457,9 +5478,9 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                     // في الأيام السابقة بعد اكتمال الترميم. إن لم تُنجز الخطوة، تبقى نفسها.
                                     elapsed: 1 + getOriginalMfReinforcementProgress(item.completedGlobalDay, globalDay - 1).totalDone
                                 }))
-                                .filter(item => item.elapsed >= 1 && item.elapsed <= NEW_REVIEW_TAIL_REPS + MF_FULL_REPS);
+                                .filter(item => item.elapsed >= 1 && item.elapsed <= originalMfTotalReps);
                             for (const item of activeReinforcements) {
-                                const isTail = item.elapsed <= NEW_REVIEW_TAIL_REPS;
+                                const isTail = item.elapsed <= originalMfTailReps;
                                 const fullLong = `حزب ${item.hizb}`;
                                 const fullShort = `ح${item.hizb}`;
                                 const label = item.isTerminalPartial
@@ -5493,7 +5514,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                                         const maturedToday = originalMfHizbMilestones.filter(item =>
                                 Number.isInteger(item.completedGlobalDay) &&
                                 item.completedUnitCount > consolidatedMfUnits &&
-                                getOriginalMfReinforcementProgress(item.completedGlobalDay, globalDay - 1).tailDone >= NEW_REVIEW_TAIL_REPS &&
+                                getOriginalMfReinforcementProgress(item.completedGlobalDay, globalDay - 1).tailDone >= originalMfTailReps &&
                                 getOriginalMfReinforcementProgress(item.completedGlobalDay, globalDay - 1).fullDone >= MF_FULL_REPS
                             );
                                                         for (const item of maturedToday) {
@@ -5676,6 +5697,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                 }
             });
             saveState(); render();
+            syncStudentTrackingToTeacher();
         }
 
         function getTrackKey(week, day, col) { return `w${week}_d${day}_${col}`; }
@@ -5718,6 +5740,46 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
             if (col === 'mutfaletWard') delete TRACKING[getTrackKey(week, day, 'mutfalet')];
         }
 
+        // مزامنة الإنجاز والجدول الفعلي الظاهر للطالبة — مسار اختبار معزول تمامًا.
+        function syncStudentTrackingToTeacher() {
+            const studentName = String(S?.programName || PROG?.name || '').trim();
+            if (!studentName || typeof _fbDb === 'undefined' || typeof firebase === 'undefined') {
+                return Promise.resolve(false);
+            }
+            const key = studentName.replace(/[.#$[\]]/g, '_');
+            const visibleWeekRows = generateWeekSchedule();
+            const visibleWeekRowsMeta = {};
+            for (const prop of Object.keys(visibleWeekRows)) {
+                if (!/^\d+$/.test(prop)) visibleWeekRowsMeta[prop] = cloneSerializable(visibleWeekRows[prop]);
+            }
+            const payload = {
+                S: cloneSerializable(S),
+                TRACKING: { ...(TRACKING || {}) },
+                PROG: cloneSerializable(PROG),
+                stations: cloneSerializable(stations || []),
+                startDate: PROGRAM_START_DATE ? PROGRAM_START_DATE.toISOString() : null,
+                weekSchedule: {
+                    week: Number(PROG?.week) || 1,
+                    rows: cloneSerializable(Array.from(visibleWeekRows)),
+                    meta: visibleWeekRowsMeta
+                },
+                lastUpdate: firebase.database.ServerValue.TIMESTAMP
+            };
+            const write = () => _fbDb.ref('student_full_tracking_test/' + key).set(payload)
+                .then(() => true)
+                .catch(error => {
+                    console.warn('تعذّر إرسال إنجاز الطالبة للمعلمة:', error);
+                    return false;
+                });
+            const auth = firebase.auth();
+            return auth.currentUser
+                ? write()
+                : auth.signInAnonymously().then(write).catch(error => {
+                    console.warn('تعذّر تسجيل اتصال مزامنة الطالبة:', error);
+                    return false;
+                });
+        }
+
         // الحارس الوحيد لإنشاء مفاتيح التتبّع: لا علامة إنجاز لخانة غير ظاهرة في جدول اليوم.
         function isTrackableCell(row, col) {
             if (!row || row.isBuffer) return false;
@@ -5740,6 +5802,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                 else setTrackStatus(PROG.week, day, col, 'skip');
                 saveState(); render();
                 pushToLeaderboard({ recordActivity: true });
+                syncStudentTrackingToTeacher();
                 alert(col === 'newMem'
                     ? 'يجب إنجاز ورد الحفظ السابق أولاً قبل الانتقال إلى هذا الورد.'
                     : 'يجب إنجاز ورد المتفلت السابق أولاً قبل الانتقال إلى هذا الورد.');
@@ -5751,6 +5814,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
             else setTrackStatus(PROG.week, day, col, null);
             saveState(); render();
             pushToLeaderboard({ recordActivity: true });
+            syncStudentTrackingToTeacher();
             if (col === 'newMem' && getTrackStatus(PROG.week, day, col) === 'done') {
                 const completedHizb = getCompletedHizbForDay(S, PROG, day);
                 if (completedHizb && PROG.lastShownHizb !== completedHizb.hizb) {
@@ -7260,15 +7324,15 @@ function getProgressWeekKey(state) {
 // حساب مستقل للحلبة: مقام النسبة هو مهام الأسبوع كاملة، ولا يدخل في البسط
 // إنجاز يوم لم يحن بعد. النسب الشخصية وبيانات المتابعة الإدارية لا تتغير.
 function calculateLeaderboardProgressThroughToday() {
-    // الحلبة يومية: تعرض إنجاز اليوم الحالي فقط. عند بدء يوم جديد تبدأ النسبة من 0%.
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const anchor = getProgramWeekAnchorDate();
     anchor.setHours(0, 0, 0, 0);
-    const cycleDays = getDisplayCycleDays();
-    const elapsedDays = Math.floor((today.getTime() - anchor.getTime()) / 86400000);
-    const competitionWeek = Math.max(1, Math.floor(elapsedDays / cycleDays) + 1);
-    const competitionDay = ((elapsedDays % cycleDays) + cycleDays) % cycleDays + 1;
+    // الحلبة تحسب إنجاز الأسبوع المفتوح فعليًا في البرنامج، لا رقم أسبوع
+    // مستنتجًا من تاريخ البداية؛ فقد تبدأ مرحلة جديدة مع بقاء تاريخ البرنامج الأصلي.
+    const competitionWeek = Number.isInteger(Number(PROG.week)) && Number(PROG.week) >= 1
+        ? Number(PROG.week)
+        : 1;
     const savedWeek = PROG.week;
     const counts = {
         all: { total: 0, done: 0 },
@@ -7276,11 +7340,15 @@ function calculateLeaderboardProgressThroughToday() {
         mutfalet: { total: 0, done: 0 },
         newMem: { total: 0, done: 0 }
     };
-    const add = (bucket, row, col) => {
+    const add = (bucket, row, day, col) => {
         if (!isTrackableCell(row, col)) return;
         counts.all.total++;
         counts[bucket].total++;
-        if (getTrackStatus(competitionWeek, competitionDay, col) === 'done') {
+        const rowDate = new Date(anchor.getTime());
+        rowDate.setDate(anchor.getDate() + (competitionWeek - 1) * getDisplayCycleDays() + (day - 1));
+        rowDate.setHours(0, 0, 0, 0);
+        if (rowDate > today) return;
+        if (getTrackStatus(competitionWeek, day, col) === 'done') {
             counts.all.done++;
             counts[bucket].done++;
         }
@@ -7288,14 +7356,14 @@ function calculateLeaderboardProgressThroughToday() {
     try {
         PROG.week = competitionWeek;
         const rows = generateWeekSchedule();
-        const row = rows.find(r => r && !r.isBuffer && r.day === competitionDay);
-        if (row) {
-            add('mutqan', row, 'mutqan');
-            add('mutfalet', row, 'mutfaletWard');
-            add('mutfalet', row, 'mutfaletCumul');
-            add('mutfalet', row, 'mutfaletNewHizb');
-            add('newMem', row, 'newMem');
-            add('newMem', row, 'newReview');
+        for (const row of rows) {
+            if (!row || row.isBuffer) continue;
+            add('mutqan', row, row.day, 'mutqan');
+            add('mutfalet', row, row.day, 'mutfaletWard');
+            add('mutfalet', row, row.day, 'mutfaletCumul');
+            add('mutfalet', row, row.day, 'mutfaletNewHizb');
+            add('newMem', row, row.day, 'newMem');
+            add('newMem', row, row.day, 'newReview');
         }
     } finally {
         PROG.week = savedWeek;
@@ -7303,12 +7371,10 @@ function calculateLeaderboardProgressThroughToday() {
     const pct = bucket => bucket.total === 0 ? 0 : Math.round((bucket.done / bucket.total) * 100);
     return {
         week: competitionWeek,
-        day: competitionDay,
-        dayKey: formatLocalDateKey(today),
         weekPct: pct(counts.all),
         mutqanPct: pct(counts.mutqan),
         mutfaletPct: pct(counts.mutfalet),
-        newPct: S.hasNew ? pct(counts.newMem) : null
+        newPct: isNewReviewEnabled() ? pct(counts.newMem) : null
     };
 }
 
@@ -7400,8 +7466,6 @@ window.pushToLeaderboard = function({ recordActivity = false } = {}) {
             name: studentName,
             week: competitionProgress.week,
             weekKey: getCompetitionWeekKey(),
-            dayKey: competitionProgress.dayKey,
-            competitionDay: competitionProgress.day,
             progressWeekKey,
             programId,
             schemaVersion: 4,
@@ -7423,8 +7487,8 @@ window.pushToLeaderboard = function({ recordActivity = false } = {}) {
                 mutqanReviewUnit: S.mutqanReviewUnit || null,
                 mutqanDays: S.mutqanDays || null,
                 mutfaletUnit: S.dailyUnit || null,
-                hasNew: !!S.hasNew,
-                newDailyUnit: S.hasNew ? (S.newDailyUnit || null) : null
+                hasNew: isNewReviewEnabled(),
+                newDailyUnit: isNewReviewEnabled() ? (S.newDailyUnit || null) : null
             },
             completedHizbCount,
             hizbIsMilestone,
@@ -7457,7 +7521,7 @@ window.pushToLeaderboard = function({ recordActivity = false } = {}) {
         };
 
         // 4. الإرسال مع تحقق
-        const studentRef = _fbDb.ref('leaderboard/' + key);
+        const studentRef = _fbDb.ref('leaderboard_test/competition_sandbox/' + key);
         studentRef.update(dataToPush, (error) => {
             if (error) {
                 console.error("فشل الإرسال:", error);
@@ -7505,9 +7569,7 @@ function _stageHistorySafeKey(value) {
 
 function _stageHistoryRoot(target) {
     const studentKey = _stageHistorySafeKey(S.programName || PROG.name || 'طالبة');
-    return target === 'live'
-        ? `leaderboard/${studentKey}`
-        : `leaderboard_test/${studentKey}_تجربة`;
+    return `leaderboard_test/competition_sandbox/${studentKey}`;
 }
 
 function _stageHistoryPercent(done, total) {
@@ -7891,7 +7953,7 @@ window.openStudentLeaderboard = async function() {
         localStorage.setItem('qps_leaderboard_joined', '1');
         localStorage.setItem('qps_leaderboard_student_name', studentName);
         pushToLeaderboard();
-        const destination = `https://alnaafi3iya-glitch.github.io/Mihrab/leaderboard.html?mode=student&student=${encodeURIComponent(studentName)}&group=${encodeURIComponent(assignment.groupName || '')}`;
+        const destination = './leaderboard_competition_test.html';
         if (targetWindow) targetWindow.location.href = destination;
         else window.open(destination, '_blank');
         return true;
