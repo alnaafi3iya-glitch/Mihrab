@@ -235,7 +235,8 @@
             if (returnIcon) returnIcon.className = 'fa-solid fa-arrow-right';
         }
 
-        let savedGroupId = 'GENERAL';
+        // نسخة الاختبار تعرض كل السجلات الموجودة داخل بيئة الاختبار، بصرف النظر عن الحلقة.
+        let savedGroupId = 'ADMIN_ALL';
         let directGroupResolutionPending = isDirectStudentEntry;
         let directGroupsLoaded = false;
         let directAssignmentsLoaded = false;
