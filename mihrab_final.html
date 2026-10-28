@@ -6861,6 +6861,7 @@ else if (S.step === 8) {
                         <div class="text-right"><span class="block text-[10px] text-emerald-300">نسبة إنجاز الأسبوع</span><span class="text-lg font-black">${progressPct}%</span></div>
                             <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
                             <div style="font-size:11px;color:#a7f3d0;">${S.programName}</div>
+                            <div id="school-group-under-name" style="font-size:9px;font-weight:800;color:#fde68a;${S.schoolGroupName ? '' : 'display:none;'}">${S.schoolGroupName ? `الحلقة: ${escapeHTML(S.schoolGroupName)}` : ''}</div>
                             <div id="lb-btn-area"></div>
                         </div>    
                         <div class="w-2/3 bg-white/15 h-3 rounded-full overflow-hidden border border-white/10"><div class="bg-amber-400 h-full transition-all duration-500 ease-out" style="width: ${progressPct}%"></div></div>
@@ -7900,18 +7901,18 @@ window.resolveSchoolAssignment = async function({ persist = false } = {}) {
     const studentName = String(S?.programName || '').trim();
     if (!studentName || typeof _fbDb === 'undefined') return null;
     const candidates = [...new Set([
+        studentName.replace(/\s+/g, '_'),
         studentName,
-        studentName.replace(/\s+/g, ' '),
-        studentName.replace(/\s+/g, '_')
+        studentName.replace(/\s+/g, ' ')
     ].map(name => name.replace(/[.#$[\]]/g, '_')))];
 
-    let groupId = S.schoolGroupId || '';
-    if (!groupId) {
-        for (const studentKey of candidates) {
-            const snapshot = await _fbDb.ref(`dashboard_data/student_groups/${studentKey}`).once('value');
-            if (snapshot.val()) { groupId = snapshot.val(); break; }
-        }
+    // ربط الإدارة هو المرجع في كل فتح؛ لا نعتمد قيمة GENERAL قديمة محفوظة محلياً.
+    let groupId = '';
+    for (const studentKey of candidates) {
+        const snapshot = await _fbDb.ref(`dashboard_data/student_groups/${studentKey}`).once('value');
+        if (snapshot.val()) { groupId = snapshot.val(); break; }
     }
+    if (!groupId) groupId = S.schoolGroupId || '';
     if (!groupId) return null;
 
     let group = {};
@@ -7922,6 +7923,11 @@ window.resolveSchoolAssignment = async function({ persist = false } = {}) {
     S.schoolGroupId = groupId;
     S.schoolGroupName = group.name || group.teacher || '';
     S.schoolTeacherName = group.teacher || '';
+    const groupLine = document.getElementById('school-group-under-name');
+    if (groupLine) {
+        groupLine.textContent = S.schoolGroupName ? `الحلقة: ${S.schoolGroupName}` : '';
+        groupLine.style.display = S.schoolGroupName ? '' : 'none';
+    }
     if (persist && typeof saveState === 'function') saveState();
     return {
         version:1,
@@ -7954,7 +7960,7 @@ window.openStudentLeaderboard = async function({ join = false } = {}) {
         if (join) localStorage.setItem('qp_leaderboard_joined', '1');
         localStorage.setItem('qp_leaderboard_student_name', studentName);
         pushToLeaderboard();
-        const destination = './leaderboard.html?v=20261028-2';
+        const destination = `./leaderboard.html?v=20261028-3&mode=student&student=${encodeURIComponent(studentName)}`;
         if (targetWindow) targetWindow.location.href = destination;
         else window.open(destination, '_blank');
         if (join) {

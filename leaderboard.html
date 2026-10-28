@@ -234,8 +234,11 @@
             if (returnIcon) returnIcon.className = 'fa-solid fa-arrow-right';
         }
 
-        // نسخة الاختبار تعرض كل السجلات الموجودة داخل بيئة الاختبار، بصرف النظر عن الحلقة.
-        let savedGroupId = 'ADMIN_ALL';
+        // الدخول العادي يحتفظ بآخر حلقة، أما الدخول المباشر باسم الطالبة
+        // فينتظر حسم الحلقة من ربط الإدارة ولا يبدأ بالحلبة العامة أو بجميع الحلقات.
+        let savedGroupId = isDirectGroupPreview
+            ? requestedPreviewGroup
+            : (localStorage.getItem('qp_leaderboard_group_id') || "");
         let directGroupResolutionPending = isDirectStudentEntry;
         let directGroupsLoaded = false;
         let directAssignmentsLoaded = false;
