@@ -6879,10 +6879,10 @@ else if (S.step === 8) {
                 }
                 newPct = t===0?0:Math.round((d/t)*100);
             }
-            const _mutqanReachedEndPage = Math.max(0, ...(Array.isArray(weekRowsForPct.mutqanCoverageRanges)
-                ? weekRowsForPct.mutqanCoverageRanges.map(range => Number(range?.endPage) || 0)
-                : []));
-            const _hizbBadge = updateHizbLeaderboardBadge(_mutqanReachedEndPage);
+            cconst _hizbBadge = updateHizbLeaderboardBadge(
+    weekRowsForPct.snappedEndThisWeek,
+    weekRowsForPct.completedHizbCountWithIndependentRanges
+);
             try { const _st=JSON.parse(localStorage.getItem('qps_current_program_v6')||'{}'); _st._mutqanPct=mutqanPct; _st._mutfaletPct=mutfaletPct; _st._newPct=newPct; _st._completedHizbCount=_hizbBadge.completedHizbCount; _st._hizbIsMilestone=_hizbBadge.hizbIsMilestone; _st._hizbMessage=_hizbBadge.hizbMessage; _st._hizbMilestoneTimestamp=_hizbBadge.hizbMilestoneTimestamp; _st._hizbMessageVersion=_hizbBadge.hizbMessageVersion; localStorage.setItem('qps_current_program_v6',JSON.stringify(_st)); } catch(e){}
 
             function bar(pct, color, track, textColor, label) {
