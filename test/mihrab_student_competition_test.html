@@ -4107,9 +4107,15 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
 // ---- isSequentialTrackDayBlocked ----
         function isSequentialTrackDayBlocked(day, col, rows) {
             if (!['newMem', 'mutfaletWard', 'mutfaletNewHizb'].includes(col)) return false;
+            // عند تكرار نفس ورد المتفلت بسبب عدم الإنجاز، يجوز إنجازه في اليوم اللاحق.
+            // لا نسمح بتجاوز ورد مختلف لم يُنجز، ولا نغيّر قواعد الحفظ الجديد.
+            const currentRow = col === 'mutfaletWard'
+                ? rows.find(row => !row.isBuffer && row.day === day)
+                : null;
             return rows
                 .filter(row => !row.isBuffer && row.day < day && isTrackableCell(row, col))
-                .some(row => getTrackStatus(PROG.week, row.day, col) !== 'done');
+                .some(row => getTrackStatus(PROG.week, row.day, col) !== 'done' &&
+                    !(col === 'mutfaletWard' && currentRow && row.mutfalet === currentRow.mutfalet));
         }
 
 // ---- renderCumulativeTextHTML ----

@@ -653,10 +653,10 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
             return !!S.hasNew && S.newReviewEnabled !== false;
         }
 
-        // في نسخة الاختبار: يبدأ العرض الفعلي لمطابقة حساب الطالبة.
-        // يبقى زر التخطيط متاحاً للمعلمة، دون تعديل بيانات الإنجاز.
+        // نسخة المعلمة: التخطيط هو العرض الافتراضي، ويمكن إظهار التوزيع
+        // الفعلي المبني على الإنجاز دون تغيير قواعد الإنجاز نفسها.
         function isPlannedDistributionView() {
-            return PROG.teacherDistributionView === 'planned';
+            return (PROG.teacherDistributionView || 'planned') === 'planned';
         }
 
         // === ميزة "التوزيع الفعلي الحقيقي للمعلمة" (طلب صريح من بسمة، متابعة مباشرة
