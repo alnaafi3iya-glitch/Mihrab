@@ -4107,15 +4107,20 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
 // ---- isSequentialTrackDayBlocked ----
         function isSequentialTrackDayBlocked(day, col, rows) {
             if (!['newMem', 'mutfaletWard', 'mutfaletNewHizb'].includes(col)) return false;
-            // عند تكرار نفس ورد المتفلت بسبب عدم الإنجاز، يجوز إنجازه في اليوم اللاحق.
-            // لا نسمح بتجاوز ورد مختلف لم يُنجز، ولا نغيّر قواعد الحفظ الجديد.
-            const currentRow = col === 'mutfaletWard'
-                ? rows.find(row => !row.isBuffer && row.day === day)
-                : null;
-            return rows
-                .filter(row => !row.isBuffer && row.day < day && isTrackableCell(row, col))
-                .some(row => getTrackStatus(PROG.week, row.day, col) !== 'done' &&
-                    !(col === 'mutfaletWard' && currentRow && row.mutfalet === currentRow.mutfalet));
+            const earlier = rows.filter(row => !row.isBuffer && row.day < day && isTrackableCell(row, col));
+            if (col !== 'mutfaletWard') {
+                return earlier.some(row => getTrackStatus(PROG.week, row.day, col) !== 'done');
+            }
+            // A repeated unfinished ward may be completed on a later eligible day.
+            // A prior attempt is satisfied once ANY occurrence of that same ward is done.
+            // Do not treat a previous skipped attempt as a permanent blocker.
+            const current = rows.find(row => !row.isBuffer && row.day === day);
+            return earlier.some(row =>
+                row.mutfalet !== (current && current.mutfalet) &&
+                !rows.some(other => !other.isBuffer && other.day < day &&
+                    other.mutfalet === row.mutfalet &&
+                    getTrackStatus(PROG.week, other.day, 'mutfaletWard') === 'done')
+            );
         }
 
 // ---- renderCumulativeTextHTML ----
