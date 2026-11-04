@@ -3903,9 +3903,7 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             else if (reviewUnit === "بالأحزاب") { for (let i=1; i<=60; i++) { let ep = (i<60) ? HIZB_START_PAGES[i]-1 : 604; if (ep <= rawEndPage+0.05) snapped = ep; } }
             else if (reviewUnit === "بالأرباع") { for (let i=0; i<240; i++) { let ep = unitLastRealPage(i, "ربع"); if (ep <= rawEndPage+0.05) snapped = ep; } }
             else if (reviewUnit === "بنصف حزب") { for (let i=0; i<120; i++) { let ep = unitLastRealPage(i, "نصف حزب"); if (ep <= rawEndPage+0.05) snapped = ep; } }
-            // إذا لم تكتمل أي وحدة من وحدة المتقن المختارة فلا نمرّر ذيلاً
-            // جزئياً؛ يبقى في المتفلت حتى تكتمل الوحدة كاملة.
-            return snapped;
+            return snapped || Math.floor(rawEndPage);
         }
 
         // بداية وحدة مراجعة المتقن التي تحتوي الصفحة المحددة. نحتاجها عند منع
@@ -4019,13 +4017,38 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             return merged;
         }
 
-        // بوابة وحدة المتقن: لا يخرج من المتفلت إلا ما اكتملت وحدته المختارة.
-        // أي بقية غير مكتملة تبقى معلقة ولا تُفكك إلى وحدة أصغر.
+        // يقسم النطاق المنتقل إلى المتقن بالوحدة المختارة، ويعرض أي بقية لم
+        // تكتمل وحدتها الكبرى بأكبر وحدة أصغر مكتملة بدلاً من إخفائها أو
+        // تفتيتها مباشرة إلى صفحات. عند اكتمال الوحدة الكبرى في أسبوع لاحق
+        // يعاد بناؤها تلقائياً كوحدة واحدة.
         function buildAdaptiveMutqanRanges(startPage, endPage, preferredUnit) {
+            const fallback = {
+                "بالأجزاء": "بالأحزاب",
+                "بالسور": "بالأحزاب",
+                "بالأحزاب": "بنصف حزب",
+                "بنصف حزب": "بالأرباع",
+                "بالأرباع": "بالصفحات"
+            };
             const start = Math.max(1, Math.min(604, Math.floor(startPage)));
             const end = Math.max(start, Math.min(604, Math.floor(endPage)));
-            return getCompletedMutqanRangesWithin(start, end, preferredUnit)
-                .map(range => ({ ...range, reviewUnitOverride: preferredUnit }));
+            if (preferredUnit === "بالصفحات") {
+                return [{ startPage: start, endPage: end, reviewUnitOverride: "بالصفحات" }];
+            }
+
+            const complete = getCompletedMutqanRangesWithin(start, end, preferredUnit);
+            const result = [];
+            let cursor = start;
+            for (const range of complete) {
+                if (cursor < range.startPage) {
+                    result.push(...buildAdaptiveMutqanRanges(cursor, range.startPage - 1, fallback[preferredUnit] || "بالصفحات"));
+                }
+                result.push({ ...range, reviewUnitOverride: preferredUnit });
+                cursor = range.endPage + 1;
+            }
+            if (cursor <= end) {
+                result.push(...buildAdaptiveMutqanRanges(cursor, end, fallback[preferredUnit] || "بالصفحات"));
+            }
+            return result;
         }
 
         // نطاق المتفلت في برنامج بلا متقن قد يبدأ من أول سورة اختارتها الطالبة
@@ -4033,7 +4056,26 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
         // لذلك تُعامل كل دفعة مكتملة من وحدات برنامجها كحزب واحد، ولا نعيد
         // تفكيكها إلى صفحات لمجرد أن بدايتها لا تطابق HIZB_START_PAGES.
         function buildNoInitialMutqanRanges(startPage, endPage, preferredUnit) {
-            return buildAdaptiveMutqanRanges(startPage, endPage, preferredUnit);
+            const start = Math.max(1, Math.min(604, Math.floor(startPage)));
+            const end = Math.max(start, Math.min(604, Math.floor(endPage)));
+            if (!["بالأجزاء", "بالسور"].includes(preferredUnit)) {
+                return [{ startPage: start, endPage: end, reviewUnitOverride: preferredUnit }];
+            }
+
+            const completePreferred = getCompletedMutqanRangesWithin(start, end, preferredUnit);
+            const result = [];
+            let cursor = start;
+            for (const range of completePreferred) {
+                if (cursor < range.startPage) {
+                    result.push({ startPage: cursor, endPage: range.startPage - 1, reviewUnitOverride: "بالأحزاب" });
+                }
+                result.push({ ...range, reviewUnitOverride: preferredUnit });
+                cursor = range.endPage + 1;
+            }
+            if (cursor <= end) {
+                result.push({ startPage: cursor, endPage: end, reviewUnitOverride: "بالأحزاب" });
+            }
+            return result;
         }
 
         // ==============================================================
@@ -4090,28 +4132,17 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
         function getMfTimelineUnitsBeforeDay(globalDay, activeDaysPerWeek, mfDayLimit) {
             const epoch = Number.isInteger(PROG.mfEpochGlobalDay) ? PROG.mfEpochGlobalDay : 0;
             if (globalDay <= epoch + 1) return 0;
-            const targetPosition = getTrackPositionForGlobalDay(globalDay);
             let count = 0;
-            const stoppedWeeks = new Set();
             for (let d = epoch + 1; d < globalDay; d++) {
                 if (!isMfEligibleGlobalDay(d, activeDaysPerWeek, mfDayLimit) || isOriginalMfPausedOn(d)) continue;
                 const position = getTrackPositionForGlobalDay(d);
-                if (position.week === targetPosition.week) {
-                    // داخل الأسبوع يبقى التخطيط ثابتاً؛ القفل يمنع إنجاز
-                    // الورد اللاحق قبل السابق، والتسوية تتم أول الأسبوع التالي.
-                    count++;
-                    continue;
-                }
                 if (isPlannedDistributionView()) {
+                    // يبقى تخطيط المعلمة تنبؤياً، مستقلاً عن تسجيل الطالبة.
                     count++;
                     continue;
                 }
-                if (stoppedWeeks.has(position.week)) continue;
-                if (getTrackStatus(position.week, position.day, 'mutfaletWard') !== 'done') {
-                    stoppedWeeks.add(position.week);
-                    continue;
-                }
-                count++;
+                // في العرض الفعلي لا نستهلك ورداً لم تسجل الطالبة إنجازه.
+                if (getTrackStatus(position.week, position.day, 'mutfaletWard') === 'done') count++;
             }
             return count;
         }
@@ -4134,7 +4165,10 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
                 d <= endGlobalDayInclusive;
                 d++
             ) {
-                if (!isOriginalMfPausedOn(d)) count++;
+                if (isOriginalMfPausedOn(d)) continue;
+                if (isPlannedDistributionView()) { count++; continue; }
+                const position = getTrackPositionForGlobalDay(d);
+                if (getTrackStatus(position.week, position.day, 'mutfaletCumul') === 'done') count++;
             }
             return count;
         }
@@ -4468,11 +4502,12 @@ if (!newHizbMfList.some(h => h.hizb === ch.hizb)) {
                 // نفس الخط الزمني الذي يحكم الورد الظاهر: لا نمو قبل حقبة النطاق الحالي
                 // ولا أثناء الإيقاف، ويُستأنف من الوحدة نفسها بعد العودة.
                 if (isMfTimelineActiveOn(g, activeDays, mfDayLimitForCapacity)) {
-                    activeMfDaysElapsed++;
+                    activeMfDaysElapsed = getMfTimelineUnitsBeforeDay(g + 1, activeDays, mfDayLimitForCapacity);
                     const completedMilestone = originalMfHizbMilestones.find(
                         item => item.completedUnitCount === activeMfDaysElapsed
                     );
-                    if (completedMilestone && !Number.isInteger(completedMilestone.completedGlobalDay)) {
+                    if (completedMilestone && !Number.isInteger(completedMilestone.completedGlobalDay) &&
+                        (isPlannedDistributionView() || getTrackStatus(getTrackPositionForGlobalDay(g).week, getTrackPositionForGlobalDay(g).day, 'mutfaletWard') === 'done')) {
                         completedMilestone.completedGlobalDay = g;
                     }
                     if (g < currentWeekFirstGlobalDay) activeMfDaysBeforeCurrentWeek = activeMfDaysElapsed;
@@ -4676,51 +4711,6 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                 newMemStatePerDay[g] = { nMemText, nRevText, newMemIndexOfDay, newReviewInfoOnly };
             }
 
-            // في العرض الفعلي لا ينتقل الحزب القادم من الحفظ الجديد بمرور الأيام.
-            // يبقى ظاهرًا في المتفلت حتى تُنجز 12 علامة mutfaletNewHizb فعليًا،
-            // ثم يصبح جاهزًا للمتقن في اليوم التالي. الطابور تسلسلي كيلا يتداخل حزبان.
-            if (!isPlannedDistributionView()) {
-                const graduationQueue = [];
-                if (_fixedNewReviewCarry) {
-                    graduationQueue.push({
-                        target: _fixedNewReviewCarry,
-                        nominalStart: _fixedNewReviewCarry.mfStartDay || 1
-                    });
-                }
-                newHizbMfList.forEach(item => graduationQueue.push({
-                    target: item,
-                    nominalStart: item.mfStartDay || 1
-                }));
-
-                let previousCompletionDay = 0;
-                for (const entry of graduationQueue) {
-                    const canStart = Number.isFinite(previousCompletionDay);
-                    const actualStart = canStart
-                        ? Math.max(entry.nominalStart, previousCompletionDay + 1)
-                        : Number.MAX_SAFE_INTEGER;
-                    let completedReviews = 0;
-                    let completionDay = null;
-                    if (actualStart <= globalDaysEndOfWeek) {
-                        for (let day = actualStart; day <= globalDaysEndOfWeek; day++) {
-                            const position = getTrackPositionForGlobalDay(day);
-                            if (getTrackStatus(position.week, position.day, 'mutfaletNewHizb') === 'done') {
-                                completedReviews++;
-                                if (completedReviews >= MF_FULL_REPS) {
-                                    completionDay = day;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    entry.target.mfStartDay = actualStart;
-                    entry.target.mfEndDay = completionDay ?? Number.MAX_SAFE_INTEGER;
-                    entry.target.mutqanStartDay = completionDay !== null
-                        ? completionDay + 1
-                        : Number.MAX_SAFE_INTEGER;
-                    previousCompletionDay = completionDay ?? Infinity;
-                }
-            }
-
             // MIH-GAP-CATCHUP-2026-09-22: استدراك الفجوة الحزبية قبل ترقية نطاق جديد جزئي.
             const newMemGapCatchups = [];
             newHizbMfList.forEach(item => {
@@ -4781,8 +4771,8 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
             // كوحدة واحدة؛ ما يُتم ستة أيامه في منتصف الأسبوع يدخل في الدورة
             // التالية، لا بأثر رجعي من أول الأسبوع نفسه.
             // MIH-ORIGINAL-MF-SATURDAY-2026-09-22:
-            // تكتمل أهلية الانتقال عند بلوغ العدد النهائي المطلوب من المراجعات
-            // (>= FINAL_REVIEW_DELAY_DAYS)، من دون اشتراط مراجعة زائدة.
+            // لا نعتبر الحزب منتقلاً عند بلوغ آخر يوم مراجعة نفسه. يجب أن تكون
+            // المراجعات النهائية قد انقضت فعلاً (> FINAL_REVIEW_DELAY_DAYS).
             // ما يكتمل أثناء الأسبوع لا يدخل بأثر رجعي في توزيع المتقن؛ يثبت
             // يوم السبت مرة واحدة، ثم يصبح ضمن الرصيد المستقر من الأسبوع التالي.
             const consolidatedMfUnits = originalMfHizbMilestones
@@ -4971,9 +4961,10 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                         continuousCoverageEnd >= range.start - 1 &&
                         range.end >= containingHizbEnd;
 
-                    // النطاق المتصل يُدمج مع التغطية السابقة أولاً؛ ثم تحكم وحدة
-                    // المتقن في ظهوره. لا نثبّت جزءاً متصلاً كصفحات مستقلة.
-                    const mustPinPartialNewMemRange = false;
+                    const mustPinPartialNewMemRange =
+                        range.isNewMemGraduation === true &&
+                        !isExactFullHizbRange &&
+                        !completesHizbWithPriorCoverage;
 
                     if (
                         !range.isTerminalPartial &&
@@ -5055,34 +5046,14 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
             // النطاق singleAtomicUnit (تصحيح MIH-003) يُستثنى من التقسيم التكيفي: هو
             // أصلاً وحدة واحدة مكتملة (حزب تخرَّج من المتفلت)، وتقسيمه هنا كغيره كان
             // سيُنتج تسميات فرعية (ربع/نصف حزب) بدل اسم الحزب نفسه.
-            const mergedDisjointReadyRanges = [];
-            disjointReadyTransferredRanges
-                .slice()
-                .sort((a, b) => a.startPage - b.startPage)
-                .forEach(range => {
-                    const last = mergedDisjointReadyRanges[mergedDisjointReadyRanges.length - 1];
-                    if (last && range.startPage <= last.endPage + 1) {
-                        last.endPage = Math.max(last.endPage, range.endPage);
-                        last.availableFromGlobalDay = Math.max(
-                            last.availableFromGlobalDay || 0,
-                            range.availableFromGlobalDay || 0
-                        ) || null;
-                        if (range.source === 'graduated-mutafallit') last.source = range.source;
-                    } else {
-                        mergedDisjointReadyRanges.push({ ...range });
-                    }
+            const completedDisjointReadyTransferredRanges = fullHizbDisjointReadyRanges
+                .flatMap(range => {
+                    if (range.source === 'terminal-partial') return [{ ...range, reviewUnitOverride: 'بالصفحات' }];
+                    if (range.preserveExactRange) return [{ ...range, reviewUnitOverride: 'بالصفحات' }];
+                    if (range.singleAtomicUnit) return [{ ...range }];
+                    return buildAdaptiveMutqanRanges(range.startPage, range.endPage, S.mutqanReviewUnit)
+                        .map(completedRange => ({ ...completedRange, source: range.source }));
                 });
-            const completedDisjointReadyTransferredRanges = mergedDisjointReadyRanges
-                .flatMap(range => buildAdaptiveMutqanRanges(
-                    range.startPage,
-                    range.endPage,
-                    S.mutqanReviewUnit
-                ).map(completedRange => ({
-                    ...completedRange,
-                    source: range.source,
-                    availableFromGlobalDay: range.availableFromGlobalDay || null,
-                    hizb: range.hizb || null
-                })));
 
             // ندمج التغطية أولاً، ثم نستخرج وحدات المتقن المكتملة فقط.
             snappedEndThisWeek = Math.max(
@@ -5093,8 +5064,11 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                     false
                 )
             );
-            // حتى عند عدم وجود متقن ابتدائي تبقى بوابة الوحدة المختارة حاكمة؛
-            // لا يُعرض ذيل سورة/حزب/جزء بوحدة أصغر مؤقتاً.
+            // بلا متقن ابتدائي لا ننتظر اكتمال السورة/الجزء المختار ولا نسقط
+            // الذيل المكتمل تثبيته؛ سيعرضه التقسيم التكيفي بوحدة أصغر مؤقتاً.
+            if (S.hasInitialMutqan === false) {
+                snappedEndThisWeek = Math.max(inheritedMutqanEndPage, continuousCoverageEnd);
+            }
 
             // حاجز عدم التداخل: لا يجوز أن تدخل في المتقن أي صفحة ما زالت معروضة
             // في المتفلت خلال الأسبوع نفسه. تظهر هذه الحالة خصوصاً عند بدء مرحلة
@@ -5476,7 +5450,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                             : -1;
                                                 const maturedOriginalMfEndIndex = originalMfHizbMilestones.reduce((max, item) => {
                             if (!Number.isInteger(item.completedGlobalDay)) return max;
-                            if (countMfUnpausedReviewDays(item.completedGlobalDay, globalDay) <= FINAL_REVIEW_DELAY_DAYS) return max;
+                            if (countMfUnpausedReviewDays(item.completedGlobalDay, globalDay - 1) < FINAL_REVIEW_DELAY_DAYS) return max;
                             return Math.max(max, startMfIndex + item.completedUnitCount - 1);
                         }, -1);
                         const mfCumStart = mfCumulativeEnd >= mfCumulativeBaseStart
@@ -5506,7 +5480,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                 mfCarryoverCumulativeText ||
                                 (
                                     totalBaseMfUnits > 0 &&
-                                    hasMfCumulative &&
+                                    hasMfCumulative && mfCumStart <= mfCumulativeEnd &&
                                     (
                                         activeMfUnitIndexForCumul <= totalBaseMfUnits ||
                                         withinFinalReviewWindow
@@ -5564,7 +5538,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                                         const maturedToday = originalMfHizbMilestones.filter(item =>
                                 Number.isInteger(item.completedGlobalDay) &&
                                 item.completedUnitCount > consolidatedMfUnits &&
-                                countMfUnpausedReviewDays(item.completedGlobalDay, globalDay) === originalMfTotalReps + 1
+                                (countMfUnpausedReviewDays(item.completedGlobalDay, globalDay - 1) >= originalMfTotalReps && countMfUnpausedReviewDays(item.completedGlobalDay, globalDay - 2) < originalMfTotalReps)
                             );
                                                         for (const item of maturedToday) {
                                 alreadyMaturedThisWeekHizbs.add(item.hizb);
@@ -6880,6 +6854,7 @@ else if (S.step === 8) {
                         <div class="text-right"><span class="block text-[10px] text-emerald-300">نسبة إنجاز الأسبوع</span><span class="text-lg font-black">${progressPct}%</span></div>
                             <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
                             <div style="font-size:11px;color:#a7f3d0;">${S.programName}</div>
+                            <div id="school-group-under-name" style="font-size:9px;font-weight:800;color:#fde68a;${S.schoolGroupName ? '' : 'display:none;'}">${S.schoolGroupName ? `الحلقة: ${escapeHTML(S.schoolGroupName)}` : ''}</div>
                             <div id="lb-btn-area"></div>
                         </div>    
                         <div class="w-2/3 bg-white/15 h-3 rounded-full overflow-hidden border border-white/10"><div class="bg-amber-400 h-full transition-all duration-500 ease-out" style="width: ${progressPct}%"></div></div>
@@ -7452,7 +7427,7 @@ window.pushToLeaderboard = function({ recordActivity = false } = {}) {
         const hizbMilestoneTimestamp = state._hizbMilestoneTimestamp ?? null;
         const hizbMessageVersion = state._hizbMessageVersion ?? null;
 
-        const key = studentName.replace(/[.#$[\]]/g, '_');
+        const key = studentName.trim().replace(/\s+/g, '_').replace(/[.#$[\]]/g, '_');
 
         const displayedProgressWeekKey = getProgressWeekKey(state);
         const competitionState = {
@@ -7530,7 +7505,7 @@ window.pushToLeaderboard = function({ recordActivity = false } = {}) {
         };
 
         // 4. الإرسال مع تحقق
-        const studentRef = _fbDb.ref('leaderboard_test/competition_sandbox/' + key);
+        const studentRef = _fbDb.ref('leaderboard/' + key);
         studentRef.update(dataToPush, (error) => {
             if (error) {
                 console.error("فشل الإرسال:", error);
@@ -7573,12 +7548,12 @@ function _assertStageHistoryStateUnchanged(before, label) {
 }
 
 function _stageHistorySafeKey(value) {
-    return String(value || 'غير_معروف').replace(/[.#$[\]]/g, '_');
+    return String(value || 'غير_معروف').trim().replace(/\s+/g, '_').replace(/[.#$[\]]/g, '_');
 }
 
 function _stageHistoryRoot(target) {
     const studentKey = _stageHistorySafeKey(S.programName || PROG.name || 'طالبة');
-    return `leaderboard_test/competition_sandbox/${studentKey}`;
+    return `leaderboard/${studentKey}`;
 }
 
 function _stageHistoryPercent(done, total) {
@@ -7919,18 +7894,18 @@ window.resolveSchoolAssignment = async function({ persist = false } = {}) {
     const studentName = String(S?.programName || '').trim();
     if (!studentName || typeof _fbDb === 'undefined') return null;
     const candidates = [...new Set([
+        studentName.replace(/\s+/g, '_'),
         studentName,
-        studentName.replace(/\s+/g, ' '),
-        studentName.replace(/\s+/g, '_')
+        studentName.replace(/\s+/g, ' ')
     ].map(name => name.replace(/[.#$[\]]/g, '_')))];
 
-    let groupId = S.schoolGroupId || '';
-    if (!groupId) {
-        for (const studentKey of candidates) {
-            const snapshot = await _fbDb.ref(`dashboard_data/student_groups/${studentKey}`).once('value');
-            if (snapshot.val()) { groupId = snapshot.val(); break; }
-        }
+    // ربط الإدارة هو المرجع في كل فتح؛ لا نعتمد قيمة GENERAL قديمة محفوظة محلياً.
+    let groupId = '';
+    for (const studentKey of candidates) {
+        const snapshot = await _fbDb.ref(`dashboard_data/student_groups/${studentKey}`).once('value');
+        if (snapshot.val()) { groupId = snapshot.val(); break; }
     }
+    if (!groupId) groupId = S.schoolGroupId || '';
     if (!groupId) return null;
 
     let group = {};
@@ -7941,6 +7916,11 @@ window.resolveSchoolAssignment = async function({ persist = false } = {}) {
     S.schoolGroupId = groupId;
     S.schoolGroupName = group.name || group.teacher || '';
     S.schoolTeacherName = group.teacher || '';
+    const groupLine = document.getElementById('school-group-under-name');
+    if (groupLine) {
+        groupLine.textContent = S.schoolGroupName ? `الحلقة: ${S.schoolGroupName}` : '';
+        groupLine.style.display = S.schoolGroupName ? '' : 'none';
+    }
     if (persist && typeof saveState === 'function') saveState();
     return {
         version:1,
@@ -7973,7 +7953,7 @@ window.openStudentLeaderboard = async function({ join = false } = {}) {
         if (join) localStorage.setItem('qp_leaderboard_joined', '1');
         localStorage.setItem('qp_leaderboard_student_name', studentName);
         pushToLeaderboard();
-        const destination = './leaderboard_competition_test.html';
+        const destination = `./leaderboard.html?v=20261028-3&mode=student&student=${encodeURIComponent(studentName)}`;
         if (targetWindow) targetWindow.location.href = destination;
         else window.open(destination, '_blank');
         if (join) {
