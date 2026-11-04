@@ -653,10 +653,10 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
             return !!S.hasNew && S.newReviewEnabled !== false;
         }
 
-        // نسخة المعلمة: التخطيط هو العرض الافتراضي، ويمكن إظهار التوزيع
-        // الفعلي المبني على الإنجاز دون تغيير قواعد الإنجاز نفسها.
+        // في نسخة الاختبار: يبدأ العرض الفعلي لمطابقة حساب الطالبة.
+        // يبقى زر التخطيط متاحاً للمعلمة، دون تعديل بيانات الإنجاز.
         function isPlannedDistributionView() {
-            return (PROG.teacherDistributionView || 'planned') === 'planned';
+            return PROG.teacherDistributionView === 'planned';
         }
 
         // === ميزة "التوزيع الفعلي الحقيقي للمعلمة" (طلب صريح من بسمة، متابعة مباشرة
@@ -5692,16 +5692,29 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
             return getDisplayCycleDays() - 1;
         }
 
+        // تاريخ المحراب تاريخ مدني بتوقيت المغرب؛ لا يُحدد يوم بداية الأسبوع
+        // بحسب المنطقة الزمنية للجهاز الذي فتح ملف الطالبة أو المعلمة.
+        function getProgramStartCivilDate() {
+            const instant = PROGRAM_START_DATE ? new Date(PROGRAM_START_DATE) : new Date();
+            if (Number.isNaN(instant.getTime())) return new Date(NaN);
+            const parts = Intl.DateTimeFormat('en-US', {
+                timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit', day: '2-digit'
+            }).formatToParts(instant);
+            const values = Object.fromEntries(parts.filter(p =>
+                p.type === 'year' || p.type === 'month' || p.type === 'day'
+            ).map(p => [p.type, Number(p.value)]));
+            return new Date(values.year, values.month - 1, values.day);
+        }
+
         function getProgramInitialBlankDays() {
-            const start = PROGRAM_START_DATE ? new Date(PROGRAM_START_DATE) : new Date();
+            const start = getProgramStartCivilDate();
             const weekStartIndex = ALL_DAYS.indexOf('الاثنين');
             if (Number.isNaN(start.getTime()) || weekStartIndex < 0) return 0;
             return (start.getDay() - weekStartIndex + 7) % 7;
         }
 
         function getProgramWeekAnchorDate() {
-            const start = PROGRAM_START_DATE ? new Date(PROGRAM_START_DATE) : new Date();
-            start.setHours(0, 0, 0, 0);
+            const start = getProgramStartCivilDate();
             start.setDate(start.getDate() - getProgramInitialBlankDays());
             return start;
         }
