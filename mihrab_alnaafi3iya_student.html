@@ -4107,9 +4107,20 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
 // ---- isSequentialTrackDayBlocked ----
         function isSequentialTrackDayBlocked(day, col, rows) {
             if (!['newMem', 'mutfaletWard', 'mutfaletNewHizb'].includes(col)) return false;
-            return rows
-                .filter(row => !row.isBuffer && row.day < day && isTrackableCell(row, col))
-                .some(row => getTrackStatus(PROG.week, row.day, col) !== 'done');
+            const earlier = rows.filter(row => !row.isBuffer && row.day < day && isTrackableCell(row, col));
+            if (col !== 'mutfaletWard') {
+                return earlier.some(row => getTrackStatus(PROG.week, row.day, col) !== 'done');
+            }
+            // A repeated unfinished ward may be completed on a later eligible day.
+            // A prior attempt is satisfied once ANY occurrence of that same ward is done.
+            // Do not treat a previous skipped attempt as a permanent blocker.
+            const current = rows.find(row => !row.isBuffer && row.day === day);
+            return earlier.some(row =>
+                row.mutfalet !== (current && current.mutfalet) &&
+                !rows.some(other => !other.isBuffer && other.day < day &&
+                    other.mutfalet === row.mutfalet &&
+                    getTrackStatus(PROG.week, other.day, 'mutfaletWard') === 'done')
+            );
         }
 
 // ---- renderCumulativeTextHTML ----
@@ -4459,9 +4470,6 @@ if (!newHizbMfList.some(h => h.hizb === ch.hizb)) {
                         if (completedMilestone && !Number.isInteger(completedMilestone.completedGlobalDay)) {
                             completedMilestone.completedGlobalDay = g;
                         }
-                        if (mfBadgeDay === null && totalBaseMfUnits > 0 && activeMfDaysElapsed === totalBaseMfUnits) {
-                            mfBadgeDay = g;
-                        }
                         // الصفحة الموروثة تمثل سلفاً نتيجة الأسبوع الأول المقابل في المرحلة القديمة؛
                         // لذلك لا نعيد نمو المتقن فوقها خلال الأسبوع الأول. ابتداءً من الأسبوع الثاني
                         // يُستأنف النمو العضوي بوحدة واحدة مع كل ورد متفلت منجز فعلياً.
@@ -4472,6 +4480,15 @@ if (!newHizbMfList.some(h => h.hizb === ch.hizb)) {
                         if (canProcessInheritedContinuation || canProcessOrdinaryTimeline) {
                             processedMfUnits = Math.min(processedMfUnits + 1, mutqanCapacityUnits);
                         }
+                    }
+                    // لا تبدأ المراجعة النهائية في يوم إنجاز آخر ورد؛ يبدأ احتسابها
+                    // من يوم المتفلت المؤهل التالي، كما في تخطيط المعلمة.
+                    // الاعتماد على نقطة اكتمال النطاق يحفظ التاريخ الفعلي عند تأخر الطالبة.
+                    if (mfBadgeDay === null && totalBaseMfUnits > 0 &&
+                        originalMfHizbMilestones.some(item =>
+                            item.completedUnitCount === totalBaseMfUnits &&
+                            Number.isInteger(item.completedGlobalDay) && g > item.completedGlobalDay)) {
+                        mfBadgeDay = g;
                     }
                     if (g < currentWeekFirstGlobalDay) activeMfDaysBeforeCurrentWeek = activeMfDaysElapsed;
                 }
@@ -4727,14 +4744,14 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
             // يوم السبت مرة واحدة، ثم يصبح ضمن الرصيد المستقر من الأسبوع التالي.
             const consolidatedMfUnits = originalMfHizbMilestones
                 .filter(item => Number.isInteger(item.completedGlobalDay) &&
-                    countMfUnpausedReviewDays(item.completedGlobalDay, currentWeekFirstGlobalDay - 1) > FINAL_REVIEW_DELAY_DAYS)
+                    countMfUnpausedReviewDays(item.completedGlobalDay, currentWeekFirstGlobalDay - 1) >= FINAL_REVIEW_DELAY_DAYS)
                 .reduce((max, item) => Math.max(max, item.completedUnitCount), 0);
             const newlyMaturedOriginalMfMilestones = originalMfHizbMilestones
                 .filter(item => {
                     if (!Number.isInteger(item.completedGlobalDay)) return false;
                     const beforeWeek = countMfUnpausedReviewDays(item.completedGlobalDay, currentWeekFirstGlobalDay - 1);
                     const byWeekEnd = countMfUnpausedReviewDays(item.completedGlobalDay, globalDaysEndOfWeek);
-                    return beforeWeek <= FINAL_REVIEW_DELAY_DAYS && byWeekEnd > FINAL_REVIEW_DELAY_DAYS;
+                    return beforeWeek < FINAL_REVIEW_DELAY_DAYS && byWeekEnd >= FINAL_REVIEW_DELAY_DAYS;
                 });
             const effectiveProcessedMfUnits = Math.min(totalBaseMfUnits, consolidatedMfUnits);
             const lastTransferredMfUnitIndex = (effectiveProcessedMfUnits > 0) ? (startMfIndex + effectiveProcessedMfUnits - 1) : -1;
@@ -5220,6 +5237,7 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                         const rows = [];
             const mfDayLimit = Math.min(S.mfActiveDays || 6, 6);
             let carryMutqanLabel = null;
+            const alreadyMaturedThisWeekHizbs = new Set();
 
             for (let i = 0; i < activeDays; i++) {
                 const dayIndex = i + 1, globalDay = (PROG.week - 1) * activeDays + dayIndex - initialBlankDays, mfUnitIndex = globalDay - 1;
@@ -5269,6 +5287,7 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                 // من دون تغيير موضع الورد الأساسي أو إعادة توزيع المتقن.
                 const saturdayOriginalMfLabels = dayIndex === activeDays
                     ? newlyMaturedOriginalMfMilestones
+                        .filter(item => !alreadyMaturedThisWeekHizbs.has(item.hizb))
                         .map(item => `ح${item.hizb}`)
                         .filter((label, index, arr) => arr.indexOf(label) === index)
                     : [];
@@ -5418,7 +5437,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                             : -1;
                                                 const maturedOriginalMfEndIndex = originalMfHizbMilestones.reduce((max, item) => {
                             if (!Number.isInteger(item.completedGlobalDay)) return max;
-                            const reinforcement = getOriginalMfReinforcementProgress(item.completedGlobalDay, globalDay);
+                            const reinforcement = getOriginalMfReinforcementProgress(item.completedGlobalDay, globalDay - 1);
                             if (reinforcement.tailDone < originalMfTailReps || reinforcement.fullDone < MF_FULL_REPS) return max;
                             return Math.max(max, startMfIndex + item.completedUnitCount - 1);
                         }, -1);
@@ -5449,7 +5468,7 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                 mfCarryoverCumulativeText ||
                                 (
                                     totalBaseMfUnits > 0 &&
-                                    hasMfCumulative &&
+                                    hasMfCumulative && mfCumStart <= mfCumulativeEnd &&
                                     (
                                         activeMfUnitIndexForCumul <= totalBaseMfUnits ||
                                         withinFinalReviewWindow
@@ -5514,14 +5533,18 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                                                         const maturedToday = originalMfHizbMilestones.filter(item =>
                                 Number.isInteger(item.completedGlobalDay) &&
                                 item.completedUnitCount > consolidatedMfUnits &&
-                                getOriginalMfReinforcementProgress(item.completedGlobalDay, globalDay - 1).tailDone >= originalMfTailReps &&
-                                getOriginalMfReinforcementProgress(item.completedGlobalDay, globalDay - 1).fullDone >= MF_FULL_REPS
+                                getOriginalMfReinforcementProgress(item.completedGlobalDay, globalDay - 1).totalDone >= originalMfTotalReps &&
+                                getOriginalMfReinforcementProgress(item.completedGlobalDay, globalDay - 2).totalDone < originalMfTotalReps
                             );
                                                         for (const item of maturedToday) {
-                                // بعد اكتمال التقوية + 12 مراجعة يختفي من المتفلت فوراً.
-                                // لا يُضاف هنا إلى mutqanText لأن الحلقة تمر على كل يوم،
-                                // وإضافته هنا كانت سبب ظهوره يومياً. عرضه الانتقالي يتولاه
-                                // saturdayOriginalMfLabels مرة واحدة في السبت.
+                                // النقل يوم الاستحقاق مرة واحدة؛ لا يُعاد عرضه يوم السبت.
+                                alreadyMaturedThisWeekHizbs.add(item.hizb);
+                                const masteredLabel = item.isTerminalPartial ? 'النطاق الختامي' : `ح${item.hizb}`;
+                                if (!String(mutqanText || '').includes(masteredLabel)) {
+                                    mutqanText = mutqanText && mutqanText !== '—'
+                                        ? `${mutqanText}<br><span class="text-indigo-700">+ ${masteredLabel}</span>`
+                                        : masteredLabel;
+                                }
                                 const parts = String(mfCumulativeTextFinal || '')
                                     .split(' + ')
                                     .filter(part => part !== `حزب ${item.hizb}` && part !== `ح${item.hizb}`);
@@ -5668,16 +5691,29 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
             return getDisplayCycleDays() - 1;
         }
 
+        // تاريخ المحراب تاريخ مدني بتوقيت المغرب؛ لا يُحدد يوم بداية الأسبوع
+        // بحسب المنطقة الزمنية للجهاز الذي فتح ملف الطالبة أو المعلمة.
+        function getProgramStartCivilDate() {
+            const instant = PROGRAM_START_DATE ? new Date(PROGRAM_START_DATE) : new Date();
+            if (Number.isNaN(instant.getTime())) return new Date(NaN);
+            const parts = Intl.DateTimeFormat('en-US', {
+                timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit', day: '2-digit'
+            }).formatToParts(instant);
+            const values = Object.fromEntries(parts.filter(p =>
+                p.type === 'year' || p.type === 'month' || p.type === 'day'
+            ).map(p => [p.type, Number(p.value)]));
+            return new Date(values.year, values.month - 1, values.day);
+        }
+
         function getProgramInitialBlankDays() {
-            const start = PROGRAM_START_DATE ? new Date(PROGRAM_START_DATE) : new Date();
+            const start = getProgramStartCivilDate();
             const weekStartIndex = ALL_DAYS.indexOf('الاثنين');
             if (Number.isNaN(start.getTime()) || weekStartIndex < 0) return 0;
             return (start.getDay() - weekStartIndex + 7) % 7;
         }
 
         function getProgramWeekAnchorDate() {
-            const start = PROGRAM_START_DATE ? new Date(PROGRAM_START_DATE) : new Date();
-            start.setHours(0, 0, 0, 0);
+            const start = getProgramStartCivilDate();
             start.setDate(start.getDate() - getProgramInitialBlankDays());
             return start;
         }
