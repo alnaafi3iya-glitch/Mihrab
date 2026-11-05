@@ -898,7 +898,6 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
         }
 
         function saveState(runtimeSourceOverride = null) {
-            ensureProgramStartCivilDate();
             const runtimeSource = runtimeSourceOverride || getCurrentStoredState();
             const hizbRuntimeState = getProgramHizbRuntimeState(runtimeSource);
             const data = { S, PROG, TRACKING, stations, editSession, pendingStationTransition, editHistory, startDate: PROGRAM_START_DATE ? PROGRAM_START_DATE.toISOString() : null, ...hizbRuntimeState };
@@ -1708,7 +1707,6 @@ function getCompletedHizbForDay(S, PROG, pressedDay) {
         function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
         function buildExportData() {
-            ensureProgramStartCivilDate();
             return {
                 S: cloneSerializable(S),
                 PROG: cloneSerializable(PROG),
@@ -5673,43 +5671,6 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
             return `${y}-${m}-${day}`;
         }
 
-        function isCivilDateValue(value) {
-            return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
-        }
-
-        function civilDateToLocalDate(value) {
-            if (!isCivilDateValue(value)) return new Date(NaN);
-            const [year, month, day] = value.split('-').map(Number);
-            const date = new Date(year, month - 1, day);
-            return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
-                ? date
-                : new Date(NaN);
-        }
-
-        // توافق البرامج القديمة: كانت المدرسة تحفظ منتصف الليل المغربي كـ 23:00Z
-        // في فترة UTC+1 أو 00:00Z في فترة UTC. بعد استخراج اليوم المدني مرة واحدة
-        // يُحفظ داخل S.startDateCivil، فلا يعود جهاز الطالبة أو بلدها مؤثراً فيه.
-        function legacyStartDateToCivilValue(value) {
-            const instant = value ? new Date(value) : null;
-            if (!instant || Number.isNaN(instant.getTime())) return null;
-            const moroccoCivil = new Date(instant.getTime() + 60 * 60 * 1000);
-            return `${moroccoCivil.getUTCFullYear()}-${String(moroccoCivil.getUTCMonth() + 1).padStart(2, '0')}-${String(moroccoCivil.getUTCDate()).padStart(2, '0')}`;
-        }
-
-        function getProgramStartCivilValue() {
-            if (isCivilDateValue(S?.startDateCivil)) return S.startDateCivil;
-            return legacyStartDateToCivilValue(PROGRAM_START_DATE);
-        }
-
-        function ensureProgramStartCivilDate() {
-            if (!PROGRAM_START_DATE && !isCivilDateValue(S?.startDateCivil)) return null;
-            const civilValue = getProgramStartCivilValue();
-            if (!civilValue) return null;
-            S.startDateCivil = civilValue;
-            PROGRAM_START_DATE = civilDateToLocalDate(civilValue);
-            return civilValue;
-        }
-
         // تُبقي تاريخ الانطلاق متوافقاً دائماً مع يوم بداية الأسبوع المختار.
         // تشمل اليوم نفسه إن كان مطابقاً، وإلا تنتقل إلى أول occurrence تالٍ خلال 7 أيام.
         function getNextDateMatchingWeekStart(dayName, fromDate = new Date()) {
@@ -5733,8 +5694,15 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
         // تاريخ المحراب تاريخ مدني بتوقيت المغرب؛ لا يُحدد يوم بداية الأسبوع
         // بحسب المنطقة الزمنية للجهاز الذي فتح ملف الطالبة أو المعلمة.
         function getProgramStartCivilDate() {
-            const civilValue = getProgramStartCivilValue();
-            return civilValue ? civilDateToLocalDate(civilValue) : new Date(NaN);
+            const instant = PROGRAM_START_DATE ? new Date(PROGRAM_START_DATE) : new Date();
+            if (Number.isNaN(instant.getTime())) return new Date(NaN);
+            const parts = Intl.DateTimeFormat('en-US', {
+                timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit', day: '2-digit'
+            }).formatToParts(instant);
+            const values = Object.fromEntries(parts.filter(p =>
+                p.type === 'year' || p.type === 'month' || p.type === 'day'
+            ).map(p => [p.type, Number(p.value)]));
+            return new Date(values.year, values.month - 1, values.day);
         }
 
         function getProgramInitialBlankDays() {
@@ -6664,9 +6632,7 @@ else if (S.step === 8) {
                 if (!PROGRAM_START_DATE) {
                     PROGRAM_START_DATE = new Date();
                     PROGRAM_START_DATE.setHours(0, 0, 0, 0);
-                    S.startDateCivil = formatDateInputValue(PROGRAM_START_DATE);
                 }
-                ensureProgramStartCivilDate();
                 // العرض الأسبوعي ثابت من الاثنين؛ أزرار الأيام تختار يوم الانطلاق فقط.
                 S.weekStartDay = 'الاثنين';
                 const grid = document.createElement("div"); grid.className = "grid grid-cols-4 gap-2 mb-6";
@@ -6675,18 +6641,16 @@ else if (S.step === 8) {
                     btn.className = `p-3 text-xs font-bold rounded-xl border text-center transition ${isSelected ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-600 border-slate-200'}`;
                     btn.textContent = day; btn.onclick = () => {
                         PROGRAM_START_DATE = getNextDateMatchingWeekStart(day, PROGRAM_START_DATE || new Date());
-                        S.startDateCivil = formatDateInputValue(PROGRAM_START_DATE);
                         saveState(); render();
                     }; grid.appendChild(btn);
                 });
                 card.appendChild(grid);
                 const dateInput = document.createElement("input"); dateInput.type = "date"; dateInput.className = "w-full p-3 border border-slate-200 rounded-xl mb-6 text-sm text-center font-bold text-emerald-800";
-                dateInput.value = getProgramStartCivilValue() || formatDateInputValue(PROGRAM_START_DATE || new Date());
+                dateInput.value = formatDateInputValue(PROGRAM_START_DATE || new Date());
                 dateInput.onchange = (e) => {
                     const [y,m,d] = e.target.value.split('-');
                     const chosenDate = new Date(y, m-1, d);
                     PROGRAM_START_DATE = chosenDate;
-                    S.startDateCivil = e.target.value;
                     saveState(); render();
                 };
                 card.appendChild(dateInput);
@@ -7381,10 +7345,7 @@ function getCompetitionWeekKey(date = new Date()) {
     return formatLocalDateKey(d);
 }
 function getProgressWeekKey(state) {
-    const civilValue = state?.S?.startDateCivil;
-    const start = isCivilDateValue(civilValue)
-        ? civilDateToLocalDate(civilValue)
-        : (state?.startDate ? new Date(state.startDate) : null);
+    const start = state?.startDate ? new Date(state.startDate) : null;
     const week = Number(state?.PROG?.week);
     const weekDays = 7;
     const hasValidStartDate = start && !Number.isNaN(start.getTime());
