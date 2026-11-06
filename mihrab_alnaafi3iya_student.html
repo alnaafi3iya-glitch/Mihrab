@@ -5696,13 +5696,12 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
         function getProgramStartCivilDate() {
             const instant = PROGRAM_START_DATE ? new Date(PROGRAM_START_DATE) : new Date();
             if (Number.isNaN(instant.getTime())) return new Date(NaN);
-            const parts = Intl.DateTimeFormat('en-US', {
-                timeZone: 'Africa/Casablanca', year: 'numeric', month: '2-digit', day: '2-digit'
-            }).formatToParts(instant);
-            const values = Object.fromEntries(parts.filter(p =>
-                p.type === 'year' || p.type === 'month' || p.type === 'day'
-            ).map(p => [p.type, Number(p.value)]));
-            return new Date(values.year, values.month - 1, values.day);
+            const moroccoCivil = new Date(instant.getTime() + 60 * 60 * 1000);
+            return new Date(
+                moroccoCivil.getUTCFullYear(),
+                moroccoCivil.getUTCMonth(),
+                moroccoCivil.getUTCDate()
+            );
         }
 
         function getProgramInitialBlankDays() {
@@ -6017,7 +6016,7 @@ if (getTrackStatus(PROG.week, d, 'mutfaletWard') === 'done') done++;
         if (wRow?.mfAddedHizb || wRow?.mfAddedIsCarryRange) { total++; if (TRACKING[getTrackKey(week, d, 'mutfaletNewHizb')] === 'done') done++; }
                 }
                 if (isNewReviewEnabled()) {
-                    const row = generateWeekSchedule().find(r => r.day === d);
+                    const row = wRow;
                     if (row && row.newMem && row.newMem !== "—") { total++; if (TRACKING[getTrackKey(week, d, 'newMem')] === 'done') done++; }
                     if (row && row.newReview && row.newReview !== "—" && !row.newReviewInfoOnly) { total++; if (TRACKING[getTrackKey(week, d, 'newReview')] === 'done') done++; }
                 }
