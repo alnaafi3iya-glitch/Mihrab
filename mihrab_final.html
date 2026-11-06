@@ -7250,6 +7250,8 @@ card.appendChild(actionsRow);
                 if (shouldShow) sessionStorage.removeItem('mihrab_update_completed');
             } catch (e) {}
             if (!shouldShow) return;
+            const button = document.getElementById('program-update-button');
+            if (button) button.style.display = 'none';
             const bar = document.getElementById('update-bar');
             if (!bar) return;
             bar.style.display = 'block';
