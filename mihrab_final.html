@@ -5953,7 +5953,7 @@ if (getTrackStatus(PROG.week, d, 'mutfaletWard') === 'done') done++;
         if (wRow?.mfAddedHizb || wRow?.mfAddedIsCarryRange) { total++; if (TRACKING[getTrackKey(week, d, 'mutfaletNewHizb')] === 'done') done++; }
                 }
                 if (isNewReviewEnabled()) {
-                    const row = generateWeekSchedule().find(r => r.day === d);
+                    const row = wRow;
                     if (row && row.newMem && row.newMem !== "—") { total++; if (TRACKING[getTrackKey(week, d, 'newMem')] === 'done') done++; }
                     if (row && row.newReview && row.newReview !== "—" && !row.newReviewInfoOnly) { total++; if (TRACKING[getTrackKey(week, d, 'newReview')] === 'done') done++; }
                 }
