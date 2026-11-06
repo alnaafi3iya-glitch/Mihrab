@@ -173,13 +173,15 @@
     </style>
 </head>
 <body class="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 antialiased pb-12 flex flex-col items-center justify-start">
-    <!-- شريط التحديث -->
-<div id="update-bar" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#065f46;color:#fff;text-align:center;padding:10px;font-family:Tajawal,sans-serif;font-size:14px;font-weight:700;box-shadow:0 2px 8px #0004;">
-    🔄 يوجد تحديث جديد للتطبيق
-    <button onclick="applyUpdate()" style="margin-right:12px;background:#fff;color:#065f46;border:none;border-radius:8px;padding:4px 14px;font-weight:700;font-size:13px;cursor:pointer;">تحديث الآن</button>
+    <!-- رسالة تأكيد التحديث -->
+<div id="update-bar" role="status" aria-live="polite" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#065f46;color:#fff;text-align:center;padding:10px 18px;border-radius:12px;font-family:Tajawal,sans-serif;font-size:14px;font-weight:800;box-shadow:0 4px 14px #0005;white-space:nowrap;">
+    ✅ تم تحميل أحدث نسخة متاحة
 </div>
     <div class="w-full max-w-xl mx-auto">
-        <div class="w-full px-4 pt-3" style="text-align:right;">
+        <div class="w-full px-4 pt-3 flex items-center justify-between gap-2">
+            <button id="program-update-button" onclick="applyUpdate()" class="inline-flex items-center justify-center px-3 h-9 bg-emerald-50 border border-emerald-200 rounded-xl shadow-sm text-emerald-800 hover:bg-emerald-100 transition text-xs font-extrabold">
+                <span id="program-update-label">🔄 تحديث البرنامج</span>
+            </button>
             <button onclick="toggleTheme()" class="inline-flex items-center justify-center w-9 h-9 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-full shadow-sm text-slate-400 dark:text-amber-400 hover:bg-slate-50 dark:hover:bg-slate-600 transition z-[100] text-lg">
                 <span id="theme-icon">🌙</span>
             </button>
@@ -7228,8 +7230,31 @@ card.appendChild(actionsRow);
     pushToLeaderboard();
 };
        // window.onload = function() { loadSavedState(); render(); };
-        // النسخة المستقلة لا تحتاج إلى Service Worker أو ملفات مرافقة.
-        function applyUpdate() {}
+        // تحديث مستقل بلا Service Worker: معامل فريد يتجاوز نسخة المتصفح المؤقتة،
+        // مع حفظ إشارة قصيرة لعرض تأكيد واضح بعد اكتمال إعادة التحميل.
+        function applyUpdate() {
+            const button = document.getElementById('program-update-button');
+            const label = document.getElementById('program-update-label');
+            if (button) button.disabled = true;
+            if (label) label.textContent = '⏳ جارٍ التحديث...';
+            try { sessionStorage.setItem('mihrab_update_completed', '1'); } catch (e) {}
+            const freshUrl = new URL(window.location.href);
+            freshUrl.searchParams.set('v', String(Date.now()));
+            window.location.replace(freshUrl.toString());
+        }
+
+        (function showUpdateConfirmation() {
+            let shouldShow = false;
+            try {
+                shouldShow = sessionStorage.getItem('mihrab_update_completed') === '1';
+                if (shouldShow) sessionStorage.removeItem('mihrab_update_completed');
+            } catch (e) {}
+            if (!shouldShow) return;
+            const bar = document.getElementById('update-bar');
+            if (!bar) return;
+            bar.style.display = 'block';
+            setTimeout(() => { bar.style.display = 'none'; }, 5000);
+        })();
 
         // === إصلاح مطلوب صراحة (2026-09-11): عند فتح التطبيق كتطبيق مستقل من
         // الشاشة الرئيسية على iOS تحديداً، هناك خلل معروف في WebKit حيث لا يُعاد
