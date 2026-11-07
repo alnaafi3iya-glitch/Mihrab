@@ -4814,7 +4814,12 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
             // ثم يضطر حاجز عدم التداخل إلى تقليص المتقن في الأسبوع التالي.
             // النطاق المتصل وحده يمدّ المتقن الأساسي، والمنفصل يراجع كإضافة مستقلة.
             const originalMfStartPage = fP ? Math.max(1, Math.min(604, fP.start)) : 0;
+            // لا يمكن للمتفلت الواقع قبل بداية المتقن أن يوسّع «نهاية» نطاقه.
+            // نعامله كنطاق مستقل دائم بعد اكتمال التثبيت، مع إبقاء مسار المتفلت
+            // اللاحق للمتقن (أو المتداخل معه) على آليته الحالية دون تغيير.
+            const originalMfPrecedesBase = hasBaseMutqan && !!fP && fP.end < mPsafe.start;
             const originalMfIsContinuousWithBase = originalMfStartPage > 0 &&
+                originalMfStartPage >= mPsafe.start &&
                 originalMfStartPage <= inheritedMutqanEndPage + 1;
             // في البرامج التي تبدأ بلا متقن نبقي بوابة الانتقال الأصلية مستقرة:
             // لا يبدأ النقل حتى يتكوّن في المتفلت رصيد جزء كامل، والحساب يكون من
@@ -5326,7 +5331,7 @@ if (_nextRealHizb > _curRealHizb && !completedHizbs.some(ch => ch.hizb === _curR
                     });
                 // كتل الأحزاب التي تظهر في اليوم نفسه تُرتّب قرآنياً فيما بينها فقط،
                 // من دون تغيير موضع الورد الأساسي أو إعادة توزيع المتقن.
-                const saturdayOriginalMfLabels = dayIndex === activeDays
+                const saturdayOriginalMfLabels = dayIndex === activeDays && !originalMfPrecedesBase
                     ? newlyMaturedOriginalMfMilestones
                         .filter(item => !alreadyMaturedThisWeekHizbs.has(item.hizb))
                         .map(item => `ح${item.hizb}`)
@@ -5447,7 +5452,11 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                         // ونمنعه من أن يكون حداً أدنى جديداً لبداية النافذة التراكمية. فرع
                         // hasInitialMutqan===false له آليته الخاصة أصلاً (noInitialTransferredMfUnits)
                         // ولا يُمس هنا.
-                        const mutqanConsolidatedUpToIndex = (S.hasInitialMutqan !== false && snappedEndThisWeek > 0)
+                        const mutqanConsolidatedUpToIndex = (
+                            S.hasInitialMutqan !== false &&
+                            !originalMfPrecedesBase &&
+                            snappedEndThisWeek > 0
+                        )
                             ? getEndingAbsIndexForPage(snappedEndThisWeek, S.dailyUnit)
                             : -1;
                                                 const maturedOriginalMfEndIndex = originalMfHizbMilestones.reduce((max, item) => {
@@ -5455,10 +5464,21 @@ const activeMfUnitIndexForCumul = activeMfUnitIndex;
                             if (countMfUnpausedReviewDays(item.completedGlobalDay, globalDay - 1) < FINAL_REVIEW_DELAY_DAYS) return max;
                             return Math.max(max, startMfIndex + item.completedUnitCount - 1);
                         }, -1);
+                        // أحزاب المتفلت الأصلي التي ما زالت في مرحلتي التقوية/التثبيت
+                        // تُضاف أدناه كوحدات مستقلة كاملة. نستبعدها هنا من نافذة التراكمي
+                        // المنزلقة حتى لا تظهر أرباع الحزب ثم يُضاف الحزب نفسه مرة ثانية.
+                        const reinforcingOriginalMfEndIndex = originalMfPrecedesBase
+                            ? originalMfHizbMilestones.reduce((max, item) => {
+                                if (!Number.isInteger(item.completedGlobalDay)) return max;
+                                const elapsed = countMfUnpausedReviewDays(item.completedGlobalDay, globalDay);
+                                if (elapsed < 1 || elapsed > originalMfTotalReps) return max;
+                                return Math.max(max, startMfIndex + item.completedUnitCount - 1);
+                            }, -1)
+                            : -1;
                         const mfCumStart = mfCumulativeEnd >= mfCumulativeBaseStart
                             ? (S.hasInitialMutqan === false
                                 ? Math.max(mfCumulativeBaseStart, startMfIndex + noInitialTransferredMfUnits)
-                                : Math.max(mfCumulativeBaseStart, mfCumulativeEnd - uj + 1, mutqanConsolidatedUpToIndex + 1, maturedOriginalMfEndIndex + 1))
+                                : Math.max(mfCumulativeBaseStart, mfCumulativeEnd - uj + 1, mutqanConsolidatedUpToIndex + 1, maturedOriginalMfEndIndex + 1, reinforcingOriginalMfEndIndex + 1))
                             : mfCumulativeBaseStart;
                         const elapsedFinalReviewDays = mfBadgeDay !== null
                             ? countMfUnpausedReviewDays(mfBadgeDay, globalDay)
