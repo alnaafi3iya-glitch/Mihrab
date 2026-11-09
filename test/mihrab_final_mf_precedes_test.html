@@ -4285,6 +4285,24 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
             // الحزب نفسه، لا من تاريخ بدء أول وحدة فيه، حتى تحصل الوحدات المتأخرة
             // على 3 مراجعات للنصف الثاني و12 مراجعة للحزب كاملاً قبل المتقن.
             const originalMfHizbMilestones = [];
+            const openingMfHizb = totalBaseMfUnits > 0
+                ? hizbNumFromUnitIndex(startMfIndex, S.dailyUnit)
+                : null;
+            const openingMfHizbStartPage = openingMfHizb
+                ? HIZB_START_PAGES[openingMfHizb - 1]
+                : 0;
+            const openingMfHizbEndPage = openingMfHizb
+                ? (openingMfHizb < 60 ? HIZB_START_PAGES[openingMfHizb] - 1 : 604)
+                : 0;
+            const openingMfRangeStartPage = totalBaseMfUnits > 0
+                ? unitFirstRealPage(startMfIndex, S.dailyUnit)
+                : 0;
+            const openingMfCoveredPages = openingMfHizb
+                ? openingMfHizbEndPage - openingMfRangeStartPage + 1
+                : 0;
+            const openingMfHizbPages = openingMfHizb
+                ? openingMfHizbEndPage - openingMfHizbStartPage + 1
+                : 0;
             for (let offset = 0; offset < totalBaseMfUnits; offset++) {
                 const absIndex = startMfIndex + offset;
                 const hizb = hizbNumFromUnitIndex(absIndex, S.dailyUnit);
@@ -4292,7 +4310,16 @@ if (unitName === "ربع" || unitName === "ثمن" || unitName === "نصف ثم�
                     ? hizbNumFromUnitIndex(absIndex + 1, S.dailyUnit)
                     : null;
                 const closesHizb = nextHizb !== hizb;
-                if (closesHizb) {
+                // إذا بدأ المتفلت من داخل الحزب ولم يشمل الباقي أكثر من نصفه،
+                // فلا يُعد هذا الذيل حزباً مكتملاً ولا تبدأ له تقوية مستقلة؛
+                // يُضم إلى الحزب التالي وفق الآلية المستقرة. لا نطبّق الاستثناء
+                // إذا كان النطاق ينتهي هنا ولا يوجد بعده ما يُضم إليه.
+                const mergesShortOpeningTailWithNext =
+                    hizb === openingMfHizb &&
+                    openingMfRangeStartPage > openingMfHizbStartPage &&
+                    openingMfCoveredPages <= openingMfHizbPages / 2 &&
+                    offset < totalBaseMfUnits - 1;
+                if (closesHizb && !mergesShortOpeningTailWithNext) {
                     originalMfHizbMilestones.push({
                         hizb,
                         completedUnitCount: offset + 1,
